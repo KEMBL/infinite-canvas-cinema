@@ -13,3 +13,5 @@ These features are implemented in the local patched extension; integration into 
 - Preserve tags and existing JSON Canvas fields through save and reload.
 
 Based on the work of [lout33 and the Infinite Canvas contributors](https://github.com/lout33/infinite_canvas_vscode). Upstream copyright and [MIT license](LICENSE) retained.
+
+Documentation: [Requirements](docs/cinem/infinite-canvas-tag-requirements.md) | [Roadmap](docs/cinem/roadmap.md).
