@@ -198,6 +198,9 @@ window.addEventListener('message', event => {
                 message.content, 
                 message.lastModified
             );
+            if (canvasState.requestRender) {
+                canvasState.requestRender();
+            }
             break;
         case 'fileContentSaved':
             console.log('✅ File saved successfully:', message.nodeId);
@@ -210,8 +213,23 @@ window.addEventListener('message', event => {
                 null
             );
             break;
+        case 'resourceUriResolved':
+            canvasState.setImageUri(message.nodeId, message.uri, Boolean(message.missing));
+            break;
+        case 'setTag':
+            if (window.canvasApp.canvas.inputHandler) {
+                window.canvasApp.canvas.inputHandler.applyCommandSetTag(message.tag);
+            }
+            break;
+        case 'copyTag':
+            if (window.canvasApp.canvas.inputHandler) {
+                window.canvasApp.canvas.inputHandler.applyCommandCopyTag();
+            }
+            break;
     }
 });
 
 // Initialize the app
 window.canvasApp = new VSCodeCanvasApp();
+// Request content after the module has registered its load handler.
+window.vsCodeAPI?.postMessage({ type: 'ready' });

@@ -1,8 +1,8 @@
 {
   "name": "infinite-canvas",
-  "displayName": "Infinite Canvas",
-  "description": "A powerful visual canvas editor for VS Code with full Obsidian Canvas compatibility. Create infinite mind maps, diagrams, and visual workflows with AI-powered content generation and markdown support.",
-  "version": "0.1.5",
+  "displayName": "Infinite Canvas Cinema",
+  "description": "Canvas reference boards with image tags, captions, clipboard copying and JSON/YAML tag export. Fork of Infinite Canvas.",
+  "version": "0.1.7",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -37,9 +37,16 @@
     "languages": [
       {
         "id": "canvas",
-        "aliases": ["Canvas", "canvas"],
-        "extensions": [".canvas"],
-        "mimetypes": ["application/json"],
+        "aliases": [
+          "Canvas",
+          "canvas"
+        ],
+        "extensions": [
+          ".canvas"
+        ],
+        "mimetypes": [
+          "application/json"
+        ],
         "icon": {
           "light": "./icon.svg",
           "dark": "./icon.svg"
@@ -49,7 +56,7 @@
     "customEditors": [
       {
         "viewType": "infinite-canvas.canvasEditor",
-        "displayName": "Infinite Canvas",
+        "displayName": "Infinite Canvas Cinema",
         "selector": [
           {
             "filenamePattern": "*.canvas"
@@ -63,13 +70,28 @@
         "*.canvas": "canvas"
       },
       "workbench.editorAssociations": {
-        "*.canvas": "default"
+        "*.canvas": "infinite-canvas.canvasEditor"
       }
     },
     "commands": [
       {
         "command": "infinite-canvas.newCanvas",
         "title": "New Canvas",
+        "category": "Infinite Canvas"
+      },
+      {
+        "command": "infinite-canvas.setTag",
+        "title": "Set tag",
+        "category": "Infinite Canvas"
+      },
+      {
+        "command": "infinite-canvas.copyTag",
+        "title": "Copy @tag",
+        "category": "Infinite Canvas"
+      },
+      {
+        "command": "infinite-canvas.exportTags",
+        "title": "Export tags",
         "category": "Infinite Canvas"
       }
     ],
@@ -78,6 +100,30 @@
         {
           "command": "infinite-canvas.newCanvas",
           "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "infinite-canvas.exportTags",
+          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "infinite-canvas.setTag",
+          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "group": "1_modification"
+        },
+        {
+          "command": "infinite-canvas.copyTag",
+          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "group": "1_modification"
+        },
+        {
+          "command": "infinite-canvas.exportTags",
+          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "group": "1_modification"
         }
       ]
     },
@@ -89,27 +135,34 @@
           "default": "",
           "description": "OpenRouter API key for AI-powered idea generation (optional - fallback to mock responses if not provided)",
           "markdownDescription": "OpenRouter API key for AI-powered idea generation. Get your free API key at [openrouter.ai](https://openrouter.ai). If not provided, the extension will use mock responses."
+        },
+        "infinite-canvas.useLegacyTagExportNames": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use shared tags.json/tags.yaml export filenames instead of canvas-specific filenames."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "test": "npm run compile && node test/regression.cjs"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
     "@types/node": "16.x",
-    "typescript": "^4.9.4"
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4",
+    "yaml": "2.8.3"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/lout33/infinite_canvas_vscode"
+    "url": "https://github.com/KEMBL/infinite-canvas-cinema"
   },
-  "homepage": "https://github.com/lout33/infinite_canvas_vscode#readme",
+  "homepage": "https://github.com/KEMBL/infinite-canvas-cinema#readme",
   "bugs": {
-    "url": "https://github.com/lout33/infinite_canvas_vscode/issues"
+    "url": "https://github.com/KEMBL/infinite-canvas-cinema/issues"
   },
   "publisher": "LuisFernando",
   "license": "MIT",

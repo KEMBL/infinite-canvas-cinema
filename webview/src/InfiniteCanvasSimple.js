@@ -1,6 +1,43 @@
 // Simplified Infinite Canvas for VS Code Extension
 // Core functionality with AI integrations
 
+const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+const TAG_CHAR_RE = /^[A-Za-z0-9_-]+$/;
+const FILE_NODE_CAPTION_HEIGHT = 32;
+const NODE_RUNTIME_KEYS = new Set([
+    'isSelected', 'content', 'isContentLoaded', 'isEditing', 'lastModified',
+    'scrollY', 'maxHeight', 'backgroundColor', 'textColor', 'borderColor',
+    'fromNode', 'toNode',
+    '_viewButtonBounds', '_editButtonBounds', '_resizeHandles', '_scrollbarBounds',
+    '_contentHeight', '_maxScroll', '_captionBounds', '_image', '_imageStatus',
+    '_imageBroken', '_imageUri'
+]);
+
+function isImageFile(filePath) {
+    return IMAGE_FILE_RE.test(String(filePath || '').split(/[?#]/)[0]);
+}
+
+function toPosixPath(filePath) {
+    return String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function normalizeTag(raw) {
+    if (raw == null) {
+        return '';
+    }
+    return String(raw).replace(/^@+/, '').trim();
+}
+
+function isValidTag(tag) {
+    return tag.length > 0 && TAG_CHAR_RE.test(tag);
+}
+
+function suggestTagFromPath(filePath) {
+    const base = toPosixPath(filePath).split('/').pop() || '';
+    const noExt = base.replace(/\.[^.]+$/, '');
+    return normalizeTag(noExt).replace(/[^A-Za-z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+}
+
 export class InfiniteCanvas {
     constructor(canvasId) {
         // Configuration
@@ -192,6 +229,9 @@ export class InfiniteCanvas {
         if (this.inputHandler) {
             this.inputHandler.setRenderCallback(this.requestRender);
         }
+        if (this.canvasState) {
+            this.canvasState.requestRender = this.requestRender;
+        }
     }
     
     render() {
@@ -253,17 +293,19 @@ class CanvasState {
     
     createFileNode(filePath, x = 100, y = 100) {
         console.log('📄 Creating file node:', { filePath, x, y });
-        
+
+        const posixFile = toPosixPath(filePath);
+        const imageNode = isImageFile(posixFile);
         const node = {
             id: `file_${++this.nodeCounter}`,
             type: 'file',
-            file: filePath,
+            file: posixFile,
             x: x,
             y: y,
-            width: 400,
-            height: 400,
-            maxHeight: 400, // Fixed height for scrolling
-            scrollY: 0,     // Vertical scroll offset
+            width: imageNode ? 280 : 400,
+            height: imageNode ? 360 : 400,
+            maxHeight: imageNode ? 360 : 400,
+            scrollY: 0,
             isSelected: false,
             backgroundColor: '#2d2d2d',
             textColor: '#cccccc',
@@ -273,6 +315,11 @@ class CanvasState {
             isEditing: false,
             lastModified: null
         };
+
+        const suggestion = suggestTagFromPath(posixFile);
+        if (suggestion && !this.isTagTaken(suggestion)) {
+            node.tag = suggestion;
+        }
         
         this.nodes.push(node);
         this.loadFileContent(node);
@@ -281,10 +328,49 @@ class CanvasState {
         this.notifyStateChange();
         return node;
     }
+
+    isTagTaken(tag, exceptNodeId = null) {
+        const normalized = normalizeTag(tag);
+        if (!normalized) {
+            return false;
+        }
+        return this.nodes.some(node => node.tag && node.tag === normalized && node.id !== exceptNodeId);
+    }
+
+    applyTag(node, rawTag) {
+        const tag = normalizeTag(rawTag);
+        if (!tag) {
+            if (node.tag) {
+                delete node.tag;
+                this.notifyStateChange();
+            }
+            return { ok: true, tag: '' };
+        }
+        if (!isValidTag(tag)) {
+            return { ok: false, error: 'Use only letters, numbers, underscore and hyphen' };
+        }
+        if (this.isTagTaken(tag, node.id)) {
+            return { ok: false, error: `Tag @${tag} is already used on this canvas` };
+        }
+        if (node.tag !== tag) {
+            node.tag = tag;
+            this.notifyStateChange();
+        }
+        return { ok: true, tag };
+    }
+
+    selectedFileNode() {
+        return this.selectedNodes.find(node => node.type === 'file') || null;
+    }
     
     async loadFileContent(fileNode) {
         try {
             console.log('📖 Loading file content for:', fileNode.file);
+
+            if (isImageFile(fileNode.file)) {
+                this.resolveImageResource(fileNode);
+                return;
+            }
             
             if (window.vsCodeAPI) {
                 window.vsCodeAPI.postMessage({
@@ -327,6 +413,56 @@ class CanvasState {
         } catch (error) {
             console.error('❌ Error saving file content:', error);
         }
+    }
+
+    resolveImageResource(fileNode) {
+        fileNode._imageStatus = 'loading';
+        fileNode._imageBroken = false;
+        if (window.vsCodeAPI) {
+            window.vsCodeAPI.postMessage({
+                type: 'resolveResourceUri',
+                filePath: fileNode.file,
+                nodeId: fileNode.id
+            });
+        }
+    }
+
+    setImageUri(nodeId, uri, missing = false) {
+        const node = this.nodes.find(n => n.id === nodeId);
+        if (!node || node.type !== 'file') {
+            return;
+        }
+        if (missing || !uri) {
+            node._imageBroken = true;
+            node._imageStatus = 'error';
+            node._image = null;
+            node.isContentLoaded = true;
+            if (this.requestRender) {
+                this.requestRender();
+            }
+            return;
+        }
+        node._imageUri = uri;
+        node._imageBroken = false;
+        const img = new Image();
+        img.onload = () => {
+            node._image = img;
+            node._imageStatus = 'loaded';
+            node.isContentLoaded = true;
+            if (this.requestRender) {
+                this.requestRender();
+            }
+        };
+        img.onerror = () => {
+            node._imageBroken = true;
+            node._imageStatus = 'error';
+            node._image = null;
+            node.isContentLoaded = true;
+            if (this.requestRender) {
+                this.requestRender();
+            }
+        };
+        img.src = uri;
     }
     
     validateFileNodes() {
@@ -480,40 +616,55 @@ class CanvasState {
         return null;
     }
     
+    persistableNode(node) {
+        const exported = { ...(this._sourceNodes?.get(node) || {}) };
+        for (const [key, value] of Object.entries(node)) {
+            if (NODE_RUNTIME_KEYS.has(key) || value === undefined) {
+                continue;
+            }
+            exported[key] = value;
+        }
+        if (!exported.tag) {
+            delete exported.tag;
+        }
+        if (exported.type === 'file' && exported.file) {
+            exported.file = toPosixPath(exported.file);
+        }
+        return exported;
+    }
+
+    persistableEdge(conn) {
+        const source = this._sourceEdges?.get(conn) || {};
+        const exported = { ...source };
+        for (const [key, value] of Object.entries(conn)) {
+            if (NODE_RUNTIME_KEYS.has(key) || value === undefined) {
+                continue;
+            }
+            exported[key] = value;
+        }
+        if (!exported.fromNode && conn.from) {
+            exported.fromNode = conn.from;
+        }
+        if (!exported.toNode && conn.to) {
+            exported.toNode = conn.to;
+        }
+        if (!exported.fromSide) {
+            exported.fromSide = 'right';
+        }
+        if (!exported.toSide) {
+            exported.toSide = 'left';
+        }
+        if (Object.hasOwn(source, 'from')) exported.from = source.from; else delete exported.from;
+        if (Object.hasOwn(source, 'to')) exported.to = source.to; else delete exported.to;
+        return exported;
+    }
+
     exportCanvasData() {
-        // Export in Obsidian-compatible format
-        return {
-            nodes: this.nodes.map(node => {
-                const baseNode = {
-                    id: node.id,
-                    x: node.x,
-                    y: node.y,
-                    width: node.width,
-                    height: node.height,
-                    type: node.type || "text"
-                };
-                
-                if (node.type === 'file') {
-                    baseNode.file = node.file;
-                } else {
-                    baseNode.text = node.text;
-                }
-                
-                // Include AI model information if available
-                if (node.aiModel) {
-                    baseNode.aiModel = node.aiModel;
-                }
-                
-                return baseNode;
-            }),
-            edges: this.connections.map(conn => ({
-                id: conn.id,
-                fromNode: conn.from,
-                fromSide: conn.fromSide || "right",
-                toNode: conn.to,
-                toSide: conn.toSide || "left"
-            }))
-        };
+        // Keep unknown JSON Canvas fields (tag, color, group background, …).
+        const data = { ...(this._documentExtra || {}) };
+        data.nodes = this.nodes.map(node => this.persistableNode(node));
+        data.edges = this.connections.map(conn => this.persistableEdge(conn));
+        return data;
     }
     
     loadCanvasData(data) {
@@ -529,6 +680,14 @@ class CanvasState {
             this.nodes = [];
             this.connections = [];
             this.nodeCounter = 0;
+            this._documentExtra = {};
+            this._sourceNodes = new WeakMap();
+            this._sourceEdges = new WeakMap();
+            for (const [key, value] of Object.entries(data)) {
+                if (key !== 'nodes' && key !== 'edges') {
+                    this._documentExtra[key] = value;
+                }
+            }
             
             // Restore viewport position
             this.offsetX = currentOffsetX;
@@ -543,14 +702,15 @@ class CanvasState {
                     const isFileNode = nodeData.type === 'file';
                     
                     const node = {
+                        ...nodeData,
                         id: nodeData.id,
                         type: nodeData.type || 'text',
-                        x: nodeData.x || 100,
-                        y: nodeData.y || 100,
+                        x: nodeData.x ?? 100,
+                        y: nodeData.y ?? 100,
                         width: nodeData.width || (isFileNode ? 400 : 250),
                         height: nodeData.height || (isFileNode ? 400 : 120),
-                        maxHeight: nodeData.maxHeight || (isFileNode ? 400 : 120),
-                        scrollY: nodeData.scrollY || 0,
+                        maxHeight: nodeData.height || (isFileNode ? 400 : 120),
+                        scrollY: 0,
                         isSelected: false,
                         backgroundColor: isFileNode ? '#2d2d2d' : '#3c3c3c',
                         textColor: '#cccccc',
@@ -558,26 +718,24 @@ class CanvasState {
                     };
                     
                     if (isFileNode) {
-                        node.file = nodeData.file;
+                        node.file = toPosixPath(nodeData.file);
+                        if (nodeData.tag) {
+                            node.tag = normalizeTag(nodeData.tag);
+                        }
                         node.content = null;
                         node.isContentLoaded = false;
                         node.isEditing = false;
                         node.lastModified = null;
-                        // Load file content after adding to nodes
                         setTimeout(() => this.loadFileContent(node), 100);
-                    } else {
+                    } else if (node.text == null) {
                         node.text = nodeData.text || 'New Node';
                     }
                     
-                    // Load AI model information if available
-                    if (nodeData.aiModel) {
-                        node.aiModel = nodeData.aiModel;
-                    }
-                    
+                    this._sourceNodes.set(node, { ...nodeData });
                     this.nodes.push(node);
                     
                     // Update counter to avoid ID conflicts
-                    const nodeNum = parseInt(node.id.replace(/^(node_|file_)/, ''));
+                    const nodeNum = parseInt(String(node.id).replace(/^(node_|file_)/, ''));
                     if (!isNaN(nodeNum) && nodeNum > this.nodeCounter) {
                         this.nodeCounter = nodeNum;
                     }
@@ -590,17 +748,15 @@ class CanvasState {
                     const fromNode = this.nodes.find(n => n.id === edgeData.fromNode);
                     const toNode = this.nodes.find(n => n.id === edgeData.toNode);
                     
-                    if (fromNode && toNode) {
-                        this.connections.push({
-                            id: edgeData.id,
-                            from: edgeData.fromNode,
-                            to: edgeData.toNode,
-                            fromSide: edgeData.fromSide,
-                            toSide: edgeData.toSide,
-                            fromNode: fromNode,
-                            toNode: toNode
-                        });
-                    }
+                    const connection = {
+                        ...edgeData,
+                        from: edgeData.fromNode,
+                        to: edgeData.toNode,
+                        fromNode,
+                        toNode
+                    };
+                    this._sourceEdges.set(connection, { ...edgeData });
+                    this.connections.push(connection);
                 });
             }
             
@@ -761,6 +917,11 @@ class InputHandler {
             console.log('🖱️ Double click detected!', e);
             this.handleDoubleClick(e);
         });
+
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.handleContextMenu(e);
+        });
         
         // Add safeguard: reset drag state when canvas loses focus or mouse leaves
         this.canvas.addEventListener('mouseleave', () => {
@@ -795,6 +956,20 @@ class InputHandler {
     }
     
     handleMouseDown(e) {
+        if (e.button === 2) {
+            const rect = this.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const canvasX = (mouseX - this.canvasState.offsetX) / this.canvasState.scale;
+            const canvasY = (mouseY - this.canvasState.offsetY) / this.canvasState.scale;
+            const clickedNode = this.canvasState.getNodeAt(canvasX, canvasY);
+            if (clickedNode && !clickedNode.isSelected) {
+                this.canvasState.selectNode(clickedNode);
+            }
+            this.isDragging = false;
+            return;
+        }
+
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -950,8 +1125,15 @@ class InputHandler {
         this.hoveredNode = this.canvasState.getNodeAt(canvasX, canvasY);
         if (this.hoveredNode) {
             this.hoveredConnectionPoint = this.getConnectionPointAt(this.hoveredNode, canvasX, canvasY);
+            if (this.hoveredNode.type === 'file') {
+                const tagPart = this.hoveredNode.tag ? `@${this.hoveredNode.tag} — ` : '';
+                this.canvas.title = `${tagPart}${this.hoveredNode.file || ''}`;
+            } else {
+                this.canvas.title = '';
+            }
         } else {
             this.hoveredConnectionPoint = null;
+            this.canvas.title = '';
         }
         
         // Update cursor based on hover state
@@ -1348,6 +1530,14 @@ class InputHandler {
         
         if (clickedNode) {
             if (clickedNode.type === 'file') {
+                if (clickedNode._captionBounds && this.isPointInRect(canvasX, canvasY, clickedNode._captionBounds)) {
+                    this.editNodeTag(clickedNode);
+                    return;
+                }
+                if (isImageFile(clickedNode.file)) {
+                    this.editNodeTag(clickedNode);
+                    return;
+                }
                 // Check if clicking on view button
                 if (clickedNode._viewButtonBounds && this.isPointInRect(canvasX, canvasY, clickedNode._viewButtonBounds)) {
                     console.log('👁️ View button clicked for:', clickedNode.file);
@@ -1374,12 +1564,196 @@ class InputHandler {
         return x >= rect.x && x <= rect.x + rect.width && 
                y >= rect.y && y <= rect.y + rect.height;
     }
+
+    closeContextMenu() {
+        const existing = document.getElementById('infinite-canvas-context-menu');
+        if (existing) {
+            existing.remove();
+        }
+    }
+
+    handleContextMenu(e) {
+        this.closeContextMenu();
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const canvasX = (mouseX - this.canvasState.offsetX) / this.canvasState.scale;
+        const canvasY = (mouseY - this.canvasState.offsetY) / this.canvasState.scale;
+        const clickedNode = this.canvasState.getNodeAt(canvasX, canvasY);
+        if (!clickedNode || clickedNode.type !== 'file') {
+            return;
+        }
+        if (!clickedNode.isSelected) {
+            this.canvasState.selectNode(clickedNode);
+        }
+
+        const menu = document.createElement('div');
+        menu.id = 'infinite-canvas-context-menu';
+        menu.className = 'context-menu';
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+
+        const setItem = document.createElement('div');
+        setItem.className = 'context-menu-item';
+        setItem.textContent = 'Set tag';
+        setItem.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            this.closeContextMenu();
+            this.editNodeTag(clickedNode);
+        });
+
+        const copyItem = document.createElement('div');
+        copyItem.className = 'context-menu-item';
+        copyItem.textContent = 'Copy @tag';
+        copyItem.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            this.closeContextMenu();
+            this.copyNodeTag(clickedNode);
+        });
+
+        menu.appendChild(setItem);
+        menu.appendChild(copyItem);
+        document.body.appendChild(menu);
+
+        const dismiss = (ev) => {
+            if (!menu.contains(ev.target)) {
+                this.closeContextMenu();
+                document.removeEventListener('mousedown', dismiss, true);
+            }
+        };
+        document.addEventListener('mousedown', dismiss, true);
+    }
+
+    copyNodeTag(node) {
+        if (!node || node.type !== 'file') {
+            return;
+        }
+        if (!node.tag) {
+            if (window.vsCodeAPI) {
+                window.vsCodeAPI.postMessage({ type: 'showWarning', text: 'Set a tag first' });
+            }
+            this.editNodeTag(node);
+            return;
+        }
+        const text = `@${node.tag}`;
+        if (window.vsCodeAPI) {
+            window.vsCodeAPI.postMessage({ type: 'copyToClipboard', text });
+        }
+    }
+
+    editNodeTag(node) {
+        if (!node || node.type !== 'file') {
+            return;
+        }
+        this.closeContextMenu();
+        const existing = document.querySelector('.file-node-tag-editor');
+        if (existing) {
+            existing.remove();
+        }
+
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const caption = node._captionBounds || {
+            x: node.x,
+            y: node.y + node.height - FILE_NODE_CAPTION_HEIGHT,
+            width: node.width,
+            height: FILE_NODE_CAPTION_HEIGHT
+        };
+        const screenX = canvasRect.left + caption.x * this.canvasState.scale + this.canvasState.offsetX;
+        const screenY = canvasRect.top + caption.y * this.canvasState.scale + this.canvasState.offsetY;
+        const screenWidth = Math.max(120, caption.width * this.canvasState.scale);
+        const screenHeight = Math.max(28, caption.height * this.canvasState.scale);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'file-node-tag-editor';
+        input.value = node.tag || suggestTagFromPath(node.file) || '';
+        input.placeholder = 'tag';
+        input.style.left = `${screenX}px`;
+        input.style.top = `${screenY}px`;
+        input.style.width = `${screenWidth}px`;
+        input.style.height = `${screenHeight}px`;
+
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+
+        const finish = async (commit) => {
+            if (!document.body.contains(input)) {
+                return;
+            }
+            if (commit) {
+                const result = this.canvasState.applyTag(node, input.value);
+                if (!result.ok) {
+                    if (window.vsCodeAPI) {
+                        window.vsCodeAPI.postMessage({ type: 'showWarning', text: result.error });
+                    }
+                    input.focus();
+                    input.select();
+                    return;
+                }
+                await this.canvasState.saveCanvasState();
+            }
+            input.remove();
+        };
+
+        input.addEventListener('keydown', (ev) => {
+            ev.stopPropagation();
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                finish(true);
+            } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                finish(false);
+            }
+        });
+        input.addEventListener('blur', () => finish(true));
+    }
+
+    applyCommandSetTag(rawTag) {
+        const fileNode = this.canvasState.selectedFileNode();
+        if (!fileNode) {
+            if (window.vsCodeAPI) {
+                window.vsCodeAPI.postMessage({ type: 'showWarning', text: 'Select a file node first' });
+            }
+            return;
+        }
+        const result = this.canvasState.applyTag(fileNode, rawTag);
+        if (!result.ok) {
+            if (window.vsCodeAPI) {
+                window.vsCodeAPI.postMessage({ type: 'showWarning', text: result.error });
+            }
+            this.editNodeTag(fileNode);
+            return;
+        }
+        this.canvasState.saveCanvasState();
+    }
+
+    applyCommandCopyTag() {
+        const fileNode = this.canvasState.selectedFileNode();
+        if (!fileNode) {
+            if (window.vsCodeAPI) {
+                window.vsCodeAPI.postMessage({ type: 'showWarning', text: 'Select a file node first' });
+            }
+            return;
+        }
+        this.copyNodeTag(fileNode);
+    }
     
     handleKeyDown(e) {
         console.log('⌨️ Key pressed:', e.key, 'Selected nodes:', this.canvasState.selectedNodes.length, 'Selected connection:', this.canvasState.selectedConnection ? this.canvasState.selectedConnection.id : 'none');
+
+        const typingInField = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
+        if (!typingInField && (e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            const fileNode = this.canvasState.selectedFileNode();
+            if (fileNode) {
+                this.editNodeTag(fileNode);
+                e.preventDefault();
+                return;
+            }
+        }
         
         // Support both Delete and Backspace keys for deletion
-        if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (!typingInField && (e.key === 'Delete' || e.key === 'Backspace')) {
             // Delete selected connection first if any
             if (this.canvasState.selectedConnection) {
                 console.log('🗑️ Deleting connection:', this.canvasState.selectedConnection.id);
@@ -1423,6 +1797,7 @@ class InputHandler {
                 width: node.width,
                 height: node.height,
                 file: node.file,
+                tag: node.tag,
                 fullPath: node.fullPath,
                 content: node.content,
                 isContentLoaded: node.isContentLoaded,
@@ -1462,6 +1837,9 @@ class InputHandler {
                 if (nodeData.width) newNode.width = nodeData.width;
                 if (nodeData.height) newNode.height = nodeData.height;
                 if (nodeData.file) newNode.file = nodeData.file;
+                if (nodeData.tag && !this.canvasState.isTagTaken(nodeData.tag, newNode.id)) {
+                    newNode.tag = nodeData.tag;
+                }
                 if (nodeData.fullPath) newNode.fullPath = nodeData.fullPath;
                 if (nodeData.content) newNode.content = nodeData.content;
                 if (nodeData.isContentLoaded) newNode.isContentLoaded = nodeData.isContentLoaded;
@@ -1901,30 +2279,37 @@ class InputHandler {
         const canvasY = (mouseY - this.canvasState.offsetY) / this.canvasState.scale;
         
         console.log('📍 Drop position:', { canvasX, canvasY });
-        
-        // Handle VS Code drag and drop (from sidebar/explorer)
-        if (e.dataTransfer && e.dataTransfer.getData) {
-            // Try to get VS Code file data
-            const vsCodeData = e.dataTransfer.getData('text/plain');
-            console.log('📋 Drop data:', vsCodeData);
-            
-            if (vsCodeData) {
-                // Check if it's a file path
-                if (vsCodeData.endsWith('.md') || vsCodeData.includes('/')) {
-                    this.createFileNodeFromPath(vsCodeData, canvasX, canvasY);
-                    return;
+
+        const uriList = (e.dataTransfer && (
+            e.dataTransfer.getData('text/uri-list') ||
+            e.dataTransfer.getData('text/plain')
+        )) || '';
+        const droppedPaths = uriList
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#'));
+
+        if (droppedPaths.length) {
+            droppedPaths.forEach((droppedPath, index) => {
+                if (isImageFile(droppedPath) || /\.md$/i.test(droppedPath) || droppedPath.includes('/') || droppedPath.includes('\\')) {
+                    this.createFileNodeFromPath(droppedPath, canvasX + (index * 40), canvasY + (index * 40));
                 }
-            }
+            });
+            return;
         }
         
-        // Handle file drops from file system
+        // Handle file drops from file system. Images are never copied.
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const files = Array.from(e.dataTransfer.files);
             console.log('📁 Dropped files:', files);
             
             files.forEach((file, index) => {
+                const absPath = file.path || file.name;
+                if (isImageFile(file.name) || isImageFile(absPath)) {
+                    this.createFileNodeFromPath(absPath, canvasX + (index * 50), canvasY + (index * 50));
+                    return;
+                }
                 if (file.name.endsWith('.md') || file.type === 'text/markdown') {
-                    // For file system drops, we need to prompt for workspace-relative path
                     this.promptForFileImport(file, canvasX + (index * 50), canvasY + (index * 50));
                 }
             });
@@ -1932,68 +2317,41 @@ class InputHandler {
     }
     
     createFileNodeFromPath(filePath, x, y) {
-        console.log('📄 Creating file node from path:', filePath);
-        
-        // Convert all paths to relative paths from workspace root
-        let relativeFilePath = this.convertToRelativePath(filePath);
-        
-        const fileNode = this.canvasState.createFileNode(relativeFilePath, x, y);
-        console.log('✅ File node created:', fileNode.id, 'with relative path:', relativeFilePath);
+        try {
+            const relative = this.convertToRelativePath(filePath);
+            return this.canvasState.createFileNode(relative, x, y);
+        } catch (error) {
+            window.vsCodeAPI?.postMessage({type: 'showWarning', text: error.message});
+        }
     }
 
     convertToRelativePath(filePath) {
-        // If already relative, return as-is
-        if (!filePath.startsWith('/')) {
-            return filePath;
+        let input = String(filePath || '').trim();
+        if (input.startsWith('file:')) {
+            input = decodeURIComponent(new URL(input).pathname).replace(/^\/([A-Za-z]:)/, '$1');
         }
-        
-        // For absolute paths, try to make them relative to workspace
-        const pathParts = filePath.split('/');
-        
-        // Look for common workspace patterns that indicate the current workspace
-        // Since we know the pattern is usually like: /Users/lout/Documents/LIFE/life3_cline/
-        // We want to find the immediate parent of our target files
-        
-        // Look for workspace identifiers in order
-        const workspacePatterns = [
-            'life3_cline',  // Most specific - this is likely our workspace root
-            'infinite_canvas_v5_vscode',  // Extension workspace
-            'LIFE'  // General parent
-        ];
-        
-        let workspaceIndex = -1;
-        for (const pattern of workspacePatterns) {
-            const index = pathParts.indexOf(pattern);
-            if (index !== -1) {
-                workspaceIndex = index;
-                console.log('📍 Found workspace pattern:', pattern, 'at index:', index);
-                break;
+        input = toPosixPath(input);
+        const root = toPosixPath(window.workspaceRoot || '').replace(/\/$/, '');
+        const windows = /^[A-Za-z]:\//.test(input);
+        if (input.startsWith('/') || windows) {
+            const candidate = windows ? input.toLowerCase() : input;
+            const workspace = windows ? root.toLowerCase() : root;
+            if (!root || !candidate.startsWith(workspace + '/')) {
+                throw new Error('References must be inside the canvas workspace folder');
             }
+            input = input.slice(root.length + 1);
         }
-        
-        if (workspaceIndex !== -1) {
-            // Return path relative to the workspace folder
-            const relativeParts = pathParts.slice(workspaceIndex + 1);
-            const relativePath = relativeParts.join('/');
-            console.log('📍 Converted absolute to relative:', filePath, '->', relativePath);
-            return relativePath;
+        const parts = [];
+        for (const part of input.split('/')) {
+            if (!part || part === '.') continue;
+            if (part === '..') {
+                if (!parts.length) throw new Error('References must stay inside the workspace folder');
+                parts.pop();
+            } else parts.push(part);
         }
-        
-        // Fallback: preserve directory structure from the last 2 components
-        // This ensures we don't lose folder information like "Clippings/file.md"
-        if (pathParts.length >= 2) {
-            const relativeParts = pathParts.slice(-2); // Keep last directory + filename
-            const relativePath = relativeParts.join('/');
-            console.log('📍 Using last 2 path components:', relativePath);
-            return relativePath;
-        }
-        
-        // Last resort: just the filename
-        const filename = pathParts[pathParts.length - 1];
-        console.log('📍 Using filename as final fallback:', filename);
-        return filename;
+        return parts.join('/');
     }
-    
+
     promptForFileImport(file, canvasX, canvasY) {
         console.log('📥 Prompting for file import:', file.name);
         
@@ -2813,6 +3171,11 @@ class CanvasRenderer {
     }
     
     drawFileNode(ctx, node, showConnectionPoints = false, inputHandler = null) {
+        if (isImageFile(node.file)) {
+            this.drawImageFileNode(ctx, node, showConnectionPoints, inputHandler);
+            return;
+        }
+
         // Draw file node background with rounded corners
         ctx.fillStyle = node.backgroundColor;
         this.drawRoundedRect(ctx, node.x, node.y, node.width, node.height, 12);
@@ -3012,6 +3375,103 @@ class CanvasRenderer {
         if (node.isSelected) {
             this.drawResizeHandles(ctx, node);
         }
+    }
+
+    drawImageFileNode(ctx, node, showConnectionPoints = false, inputHandler = null) {
+        const radius = 12;
+        const captionHeight = Math.min(FILE_NODE_CAPTION_HEIGHT, node.height * 0.25);
+        const imageHeight = Math.max(0, node.height - captionHeight);
+
+        ctx.fillStyle = '#111111';
+        this.drawRoundedRect(ctx, node.x, node.y, node.width, node.height, radius);
+        ctx.fill();
+
+        ctx.save();
+        this.drawRoundedRect(ctx, node.x, node.y, node.width, node.height, radius);
+        ctx.clip();
+
+        if (node._image && node._imageStatus === 'loaded') {
+            this.drawImageContain(ctx, node._image, node.x, node.y, node.width, imageHeight);
+        } else if (node._imageBroken || node._imageStatus === 'error') {
+            ctx.fillStyle = '#2a1a1a';
+            ctx.fillRect(node.x, node.y, node.width, imageHeight);
+            ctx.fillStyle = '#ff8a8a';
+            ctx.font = '13px Segoe UI, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('broken image', node.x + node.width / 2, node.y + imageHeight / 2 - 10);
+            ctx.fillStyle = '#999999';
+            ctx.font = '11px Segoe UI, sans-serif';
+            const missingPath = node.file || '';
+            const shown = missingPath.length > 42 ? '…' + missingPath.slice(-41) : missingPath;
+            ctx.fillText(shown, node.x + node.width / 2, node.y + imageHeight / 2 + 10);
+        } else {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(node.x, node.y, node.width, imageHeight);
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '13px Segoe UI, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Loading image…', node.x + node.width / 2, node.y + imageHeight / 2);
+        }
+
+        this.drawFileCaption(ctx, node, captionHeight);
+        ctx.restore();
+
+        ctx.strokeStyle = node.isSelected ? '#007fd4' : (node.borderColor || '#4a5568');
+        ctx.lineWidth = node.isSelected ? 3 : 2;
+        this.drawRoundedRect(ctx, node.x, node.y, node.width, node.height, radius);
+        ctx.stroke();
+
+        if (showConnectionPoints) {
+            this.drawConnectionPoints(ctx, node, inputHandler);
+        }
+        if (node.isSelected) {
+            this.drawResizeHandles(ctx, node);
+        }
+    }
+
+    drawFileCaption(ctx, node, captionHeight) {
+        const y = node.y + node.height - captionHeight;
+        ctx.fillStyle = 'rgba(12, 12, 12, 0.88)';
+        ctx.fillRect(node.x, y, node.width, captionHeight);
+
+        const tagged = Boolean(node.tag);
+        ctx.fillStyle = tagged ? '#f3f3f3' : '#8a8a8a';
+        ctx.font = tagged ? '13px Segoe UI, sans-serif' : 'italic 13px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = tagged ? `@${node.tag}` : 'set tag';
+        ctx.fillText(label, node.x + node.width / 2, y + captionHeight / 2);
+
+        node._captionBounds = {
+            x: node.x,
+            y: y,
+            width: node.width,
+            height: captionHeight
+        };
+    }
+
+    drawImageContain(ctx, img, x, y, width, height) {
+        if (!img || !img.width || !img.height || width <= 0 || height <= 0) {
+            return;
+        }
+        const imageRatio = img.width / img.height;
+        const boxRatio = width / height;
+        let drawWidth = width;
+        let drawHeight = height;
+        let drawX = x;
+        let drawY = y;
+        if (imageRatio > boxRatio) {
+            drawWidth = width;
+            drawHeight = width / imageRatio;
+            drawY = y + (height - drawHeight) / 2;
+        } else {
+            drawHeight = height;
+            drawWidth = height * imageRatio;
+            drawX = x + (width - drawWidth) / 2;
+        }
+        ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
     }
     
     drawFileScrollbar(ctx, node, headerHeight) {
