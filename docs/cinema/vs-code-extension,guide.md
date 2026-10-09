@@ -10,7 +10,7 @@ As of 2026-10-10:
 - The [GitHub fork](https://github.com/KEMBL/infinite-canvas-cinema) still contains upstream extension code `0.1.5`. Building it today does **not** include the local tag patch.
 - No VSIX release is currently published in the fork. For the patched features on another computer, copy the local VSIX there. After source integration and a release, use the matching fork release package instead.
 
-See the [requirements](https://github.com/KEMBL/infinite-canvas-cinema/blob/main/docs/cinem/infinite-canvas-tag-requirements.md) and [roadmap](../cinem/roadmap.md) for status and known gaps.
+See the [requirements](https://github.com/KEMBL/infinite-canvas-cinema/blob/main/docs/cinema/infinite-canvas-tag-requirements.md) and [roadmap](roadmap.md) for status and known gaps.
 
 ## 1. Install VS Code
 

@@ -129,7 +129,7 @@ Common extra fields and group metadata survive local round-trip checks. However,
 
 ## Integration approach
 
-- Keep fork-specific documentation in `docs/cinem/`; leave upstream documents in place.
+- Keep fork-specific documentation in `docs/cinema/`; leave upstream documents in place.
 - Restore patched host logic into maintainable TypeScript. Compiled JavaScript alone is not the source of truth and would be overwritten by the next build.
 - Add separate tag/catalog helpers where practical; keep existing editor and message-bridge changes small.
 - Avoid unrelated refactoring, renaming, dependency upgrades, and whole-file formatting.

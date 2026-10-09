@@ -14,4 +14,4 @@ These features are implemented in the local patched extension; integration into 
 
 Based on the work of [lout33 and the Infinite Canvas contributors](https://github.com/lout33/infinite_canvas_vscode). Upstream copyright and [MIT license](LICENSE) retained.
 
-Documentation: [Requirements](docs/cinem/infinite-canvas-tag-requirements.md) | [Roadmap](docs/cinem/roadmap.md) | [Installation guide](docs/cinema/vs-code-extension,guide.md).
+Documentation: [Requirements](docs/cinema/infinite-canvas-tag-requirements.md) | [Roadmap](docs/cinema/roadmap.md) | [Installation guide](docs/cinema/vs-code-extension,guide.md).
