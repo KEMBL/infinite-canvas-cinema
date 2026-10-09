@@ -23,3 +23,5 @@ unified-config-test.canvas
 .DS_Store
 **/.DS_Store
 gif_reference.gif
+test/**
+**/*.vsix

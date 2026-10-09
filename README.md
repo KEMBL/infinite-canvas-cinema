@@ -2,16 +2,15 @@
 
 A fork of [Infinite Canvas for VS Code](https://github.com/lout33/infinite_canvas_vscode) for organising film and GenAI reference images on `.canvas` boards. Stable `@tags` connect visual references to Markdown descriptions and prompt scripts while images keep their original filenames and locations.
 
-## Cinema features
+## Added features
 
-These features are implemented in the local patched extension; integration into this fork is pending.
+- Original-image cards with editable tag captions, filename suggestions, validation, and duplicate-tag rejection.
+- **Copy @tag**, tag editing through double-click, context menu, `T`, and VS Code commands, plus hover details.
+- Canvas-specific JSON/YAML tag catalogs with overwrite confirmation and safe string/key handling.
+- Workspace-relative image paths, missing-image placeholders, and preservation of tags, extra fields, zero coordinates, and dangling edges through save/reload.
 
-- Image cards display the original workspace images without copying or renaming them.
-- One visible, editable tag per image, with filename suggestions and duplicate-tag validation.
-- **Copy @tag** for use in Markdown and prompts.
-- **Export tags** to `tags.json` and `tags.yaml`, mapping tags to source paths, canvas files, and node IDs.
-- Preserve tags and existing JSON Canvas fields through save and reload.
-
-Based on the work of [lout33 and the Infinite Canvas contributors](https://github.com/lout33/infinite_canvas_vscode). Upstream copyright and [MIT license](LICENSE) retained.
+Install the **0.1.7 VSIX** from [Releases](https://github.com/KEMBL/infinite-canvas-cinema/releases). It appears as **Infinite Canvas Cinema** and retains extension ID `LuisFernando.infinite-canvas`, replacing an existing upstream or patched installation in that profile.
 
 Documentation: [Requirements](docs/cinema/infinite-canvas-tag-requirements.md) | [Roadmap](docs/cinema/roadmap.md) | [Installation guide](docs/cinema/vs-code-extension,guide.md).
+
+Based on the work of [lout33 and the Infinite Canvas contributors](https://github.com/lout33/infinite_canvas_vscode). Upstream copyright and [MIT license](LICENSE) retained.

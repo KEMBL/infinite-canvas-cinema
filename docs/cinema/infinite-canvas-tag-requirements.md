@@ -8,25 +8,9 @@ Fork: [KEMBL/infinite-canvas-cinema](https://github.com/KEMBL/infinite-canvas-ci
 
 ## Baseline and status
 
-Reviewed on 2026-10-10:
+Integrated version: **0.1.7**, based on upstream `0.1.5` (commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`) and the `0.1.6` development patch. The host is maintained as TypeScript and builds from this repository.
 
-- Upstream baseline: `0.1.5`, commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`.
-- The public fork contains that code baseline and the cinema README. Its extension code does not yet include the local patch.
-- Development patch: `0.1.6`, not yet integrated or published. The patched host is available as compiled `out/extension.js`; its original `src/extension.ts` is missing, and the source map contains no embedded source.
-- Local statuses below come from code inspection and isolated execution checks. Full VS Code UI and reload acceptance remains pending.
-
-| Requirement | Local patch status | Remaining work |
-|---|---|---|
-| R1: Original image references | Partial | Replace hard-coded workspace detection and lossy drop-path conversion. |
-| R2: One tag per card | Implemented | Integrate and verify in VS Code. |
-| R3: Visible captions | Implemented | Verify actual image rendering and captions in VS Code. |
-| R4: On-board tag editing | Implemented | Verify double-click, context menu, T, and command behavior in VS Code. |
-| R5: Filename suggestions | Implemented, optional | Integrate and verify in VS Code. |
-| R6: JSON/YAML export | Partial | Protect outputs, validate imported tags, preserve all valid keys and string types. |
-| R7: Copy @tag | Implemented | Verify real clipboard and untagged-node editing in VS Code. |
-| R8: Safe round trips | Partial | Preserve zero coordinates and edges with missing endpoints; complete preservation checks. |
-
-See the [roadmap](roadmap.md). “Implemented” describes available local code, not a released fork build.
+R1–R8 are implemented. Regression checks cover tag validation, data preservation, path handling, and export protection. A packaged VSIX was tested in VS Code for image drop/rendering, caption editing, clipboard copying, JSON/YAML export, and save/reopen. Further editor scenarios and external AI-provider calls remain acceptance work in the [roadmap](roadmap.md).
 
 ## Scope
 
@@ -47,7 +31,7 @@ Dropping `refs/characters/reference-still.png` creates a `file` node pointing to
 - Explain when a source cannot be represented relative to that workspace; leave the source untouched.
 - Missing images show a placeholder while retaining their path and tag.
 
-The local patch resolves image resources through the host and includes a broken-image placeholder. Its webview drop-path conversion still uses hard-coded workspace names and a lossy fallback.
+Version 0.1.7 uses the actual workspace root for drops and host resource resolution. References outside that folder are rejected with a warning; nested paths are preserved.
 
 ### R2 — One optional tag per image card
 
@@ -72,7 +56,7 @@ Persist an optional `tag` on each file node:
 - Cross-canvas uniqueness is not enforced in v1; scripts use the appropriate canvas catalog.
 - Preserve other properties during tag edits and saves.
 
-Assignment, clearing, character validation, and duplicate rejection are implemented locally. Export must independently validate tags loaded from canvas JSON (R6).
+Assignment, clearing, character validation, and duplicate rejection are implemented. Export also validates tags loaded from canvas JSON (R6).
 
 ### R3 — Display the tag
 
@@ -82,7 +66,7 @@ Show each image with its `@tag` caption. Untagged cards display a muted `set tag
 
 Support caption editing, a **Set tag** context action, or `T` with a file node selected. Retain `infinite-canvas.setTag`. Update canvas JSON through the existing document-save flow.
 
-The local patch includes caption/image double-click editing, a context menu, `T`, and a VS Code input-box command. Actual editor acceptance is still pending.
+The integrated editor includes caption/image double-click editing, a context menu, `T`, and a VS Code input-box command. Packaged-editor acceptance covered the caption input; the remaining entry points still need individual UI checks.
 
 ### R5 — Suggest a tag from the filename (optional)
 
@@ -105,13 +89,13 @@ Retain `infinite-canvas.exportTags`, titled **Infinite Canvas: Export tags**. Ex
 - JSON and YAML must represent the same data, including string keys and fields.
 - Paths must be workspace-relative with POSIX slashes. Scripts consume the catalog rather than canvas coordinates.
 - Target default filenames: `<canvas-basename>.tags.json` and `<canvas-basename>.tags.yaml`, beside the canvas. Example: `references.tags.json` and `references.tags.yaml`.
-- Current local outputs are shared `tags.json` and `tags.yaml`. Retain these only as an explicit compatibility option, explaining that export replaces the previous folder catalog rather than merging canvases.
+- Shared `tags.json` and `tags.yaml` are available only through the explicit `infinite-canvas.useLegacyTagExportNames` compatibility setting; they replace the previous folder catalog rather than merging canvases.
 - Confirm replacement when either output exists. Cancelling leaves both unchanged. Report filesystem errors rather than treating them as missing files.
 - Reject duplicate or invalid non-empty tags in imported JSON before writing. Do not silently overwrite catalog entries.
 - Preserve every allowed tag, including `__proto__`, as a data key. Quote YAML strings as needed to preserve numeric-looking IDs and scalar-like tags.
 - Report successful output locations; an empty catalog is valid.
 
-Basic export is implemented locally. Gaps are shared output names, JSON-only overwrite detection, silent duplicate replacement, loss of the `__proto__` key, and numeric-looking node IDs becoming numbers in YAML.
+These export behaviors are implemented in 0.1.7. JSON/YAML catalogs and cancellation/error handling are covered by regression checks; basic export is also verified in the packaged editor.
 
 ### R7 — Copy @tag
 

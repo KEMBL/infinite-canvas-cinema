@@ -1,3 +1,13 @@
+# Cinema fork changes
+
+## 0.1.7
+
+- Integrate the 0.1.6 image/tag patch with a reconstructed TypeScript host.
+- Add captions, tag editing/suggestions, clipboard copying, and JSON/YAML export.
+- Fix workspace path handling, source-field preservation, zero coordinates, dangling edges, export protection, tag validation, and YAML string types.
+- Use canvas-specific export filenames with an explicit legacy option.
+- Fix initial webview content loading and redundant saves; retain the upstream extension ID for installation compatibility.
+
 # Changelog
 
 All notable changes to the "Infinite Canvas" extension will be documented in this file.
