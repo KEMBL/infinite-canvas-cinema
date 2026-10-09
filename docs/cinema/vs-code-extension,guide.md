@@ -6,9 +6,9 @@ This guide uses Windows and PowerShell. Install the extension once in your VS Co
 
 As of 2026-10-10:
 
-- The working local patch is `0.1.6`, packaged as `temp/infinite-canvas-0.1.6.vsix` in the cinema workspace. It includes image captions, tag editing, copying, suggestions, and basic JSON/YAML export.
+- A development patch (`0.1.6`) includes image captions, tag editing, copying, suggestions, and basic JSON/YAML export. It is not yet integrated or published in this repository.
 - The [GitHub fork](https://github.com/KEMBL/infinite-canvas-cinema) still contains upstream extension code `0.1.5`. Building it today does **not** include the local tag patch.
-- No VSIX release is currently published in the fork. For the patched features on another computer, copy the local VSIX there. After source integration and a release, use the matching fork release package instead.
+- No VSIX release is currently published in the fork. If you already have a patched VSIX, you can install it using section 2. Otherwise, section 5 explains how to build the current upstream baseline. After source integration and a release, use the matching fork release package.
 
 See the [requirements](https://github.com/KEMBL/infinite-canvas-cinema/blob/main/docs/cinema/infinite-canvas-tag-requirements.md) and [roadmap](roadmap.md) for status and known gaps.
 
@@ -26,7 +26,7 @@ If `code` is unavailable, use the VS Code installation interface in the next sec
 
 ## 2. Install a packaged VSIX
 
-For the working patched features, obtain `infinite-canvas-0.1.6.vsix` from the existing cinema workspace. Copy it to the new machine if needed. You do not need Node.js, Git, GitHub login, or an API key to install that file.
+If you already have `infinite-canvas-0.1.6.vsix`, copy it to the target computer if needed. This development package is not currently available from the fork's releases. You do not need Node.js, Git, GitHub login, or an API key to install a VSIX.
 
 In VS Code:
 
@@ -40,7 +40,7 @@ Alternatively, from PowerShell in the folder containing the package:
 code --install-extension .\infinite-canvas-0.1.6.vsix
 ```
 
-If running from the original cinema workspace root, use `.\temp\infinite-canvas-0.1.6.vsix`. Use a quoted absolute path when installing from another folder.
+Use a quoted absolute path to the VSIX when installing from another folder.
 
 To target a named profile, add `--profile "Your Profile"`. For VS Code Insiders, use `code-insiders` instead of `code`.
 

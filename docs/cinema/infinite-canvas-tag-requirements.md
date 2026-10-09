@@ -12,7 +12,7 @@ Reviewed on 2026-10-10:
 
 - Upstream baseline: `0.1.5`, commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`.
 - The public fork contains that code baseline and the cinema README. Its extension code does not yet include the local patch.
-- Local patch: `0.1.6`, in `temp/infinite-canvas-patched`. The patched host is available as compiled `out/extension.js`; its original `src/extension.ts` is missing, and the source map contains no embedded source.
+- Development patch: `0.1.6`, not yet integrated or published. The patched host is available as compiled `out/extension.js`; its original `src/extension.ts` is missing, and the source map contains no embedded source.
 - Local statuses below come from code inspection and isolated execution checks. Full VS Code UI and reload acceptance remains pending.
 
 | Requirement | Local patch status | Remaining work |
