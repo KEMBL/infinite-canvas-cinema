@@ -8,17 +8,19 @@ Install [Visual Studio Code](https://code.visualstudio.com/download). On Windows
 
 ## 2. Install the fork's VSIX
 
-Download `infinite-canvas-cinema-0.1.7.vsix` from the [v0.1.7 release](https://github.com/KEMBL/infinite-canvas-cinema/releases/tag/v0.1.7). No build tools or GitHub login are needed to install the package.
+Download `infinite-canvas-cinema-0.1.8.vsix` from the [v0.1.8 release](https://github.com/KEMBL/infinite-canvas-cinema/releases/tag/v0.1.8). No build tools or GitHub login are needed to install the package.
 
 Open Extensions (**Ctrl+Shift+X**), select **... → Install from VSIX...**, and choose the file. Reload VS Code when prompted. Alternatively, in PowerShell from the download folder:
 
 ```powershell
-code --install-extension .\infinite-canvas-cinema-0.1.7.vsix --force
+code --install-extension .\infinite-canvas-cinema-0.1.8.vsix --force
 ```
 
 Use a quoted absolute path if the package is elsewhere. For a named profile, add `--profile "Your Profile"`; for Insiders, use `code-insiders`.
 
-The display name is **Infinite Canvas Cinema**, version **0.1.7**. The package retains upstream ID `LuisFernando.infinite-canvas` for compatibility. Installing it replaces an upstream or older patched version in that profile; there is only one active installation under that ID. The repository metadata points to this fork, and upstream attribution is retained.
+The display name is **Infinite Canvas Cinema**, version **0.1.8**, publisher **kembl**, ID `kembl.infinite-canvas-cinema`. It installs separately from upstream `LuisFernando.infinite-canvas`; either can be enabled or disabled independently. Disable upstream Infinite Canvas when using this fork. Do not enable both together.
+
+Versions through 0.1.7 used the upstream ID. To migrate, leave that installation disabled and install the 0.1.8 VSIX. If the new fork was previously disabled, click **Enable** on its own Extensions page; reinstalling does not reset enablement. Rename existing custom setting keys from `infinite-canvas.*` to `infinite-canvas-cinema.*`. Canvas files and tags require no conversion.
 
 [VS Code supports UI and CLI VSIX installation](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace#_install-from-a-vsix). Keep auto-update disabled for this extension so a Marketplace version cannot replace the fork. VSIX installs disable auto-update by default.
 
@@ -38,7 +40,7 @@ Open the file. If it appears as JSON, use **Reopen Editor With... → Infinite C
 ```json
 {
   "workbench.editorAssociations": {
-    "*.canvas": "infinite-canvas.canvasEditor"
+    "*.canvas": "infinite-canvas-cinema.canvasEditor"
   }
 }
 ```
@@ -53,15 +55,15 @@ Keep images inside the canvas's workspace folder, such as `refs/characters/refer
 code --list-extensions --show-versions | Select-String 'infinite-canvas'
 ```
 
-Expect `luisfernando.infinite-canvas@0.1.7`. Then:
+Expect `kembl.infinite-canvas-cinema@0.1.8`. Then:
 
 - Drop a project image; verify the original image and its suggested tag caption.
 - Select its card and press `T`, double-click its caption, or use **Set tag** to enter `character_A_v1`.
-- Use **Copy @tag** and paste into Markdown; expect `@character_A_v1`.
-- Run **Infinite Canvas: Export tags**. A canvas named `references.canvas` produces `references.tags.json` and `references.tags.yaml` beside it.
+- Use `Copy @tag` and paste into Markdown; expect `@character_A_v1`.
+- Run **Infinite Canvas Cinema: Export tags**. A canvas named `references.canvas` produces `references.tags.json` and `references.tags.yaml` beside it.
 - Save, close, and reopen the canvas; verify the tag and image reference remain.
 
-Existing export files require overwrite confirmation. The optional `infinite-canvas.useLegacyTagExportNames` setting restores shared `tags.json`/`tags.yaml` filenames; different canvases in the same folder then share those outputs.
+Existing export files require overwrite confirmation. The optional `infinite-canvas-cinema.useLegacyTagExportNames` setting restores shared `tags.json`/`tags.yaml` filenames; different canvases in the same folder then share those outputs.
 
 ## 5. Build from a fresh checkout
 
@@ -72,15 +74,15 @@ git clone https://github.com/KEMBL/infinite-canvas-cinema.git
 Set-Location infinite-canvas-cinema
 npm.cmd ci
 npm.cmd test
-npx.cmd --yes --package @vscode/vsce@4.0.0 vsce package --no-dependencies --out infinite-canvas-cinema-0.1.7.vsix --baseContentUrl https://github.com/KEMBL/infinite-canvas-cinema/blob/main --baseImagesUrl https://github.com/KEMBL/infinite-canvas-cinema/raw/main
-code --install-extension .\infinite-canvas-cinema-0.1.7.vsix --force
+npx.cmd --yes --package @vscode/vsce@4.0.0 vsce package --no-dependencies --out infinite-canvas-cinema-0.1.8.vsix --baseContentUrl https://github.com/KEMBL/infinite-canvas-cinema/blob/main --baseImagesUrl https://github.com/KEMBL/infinite-canvas-cinema/raw/main
+code --install-extension .\infinite-canvas-cinema-0.1.8.vsix --force
 ```
 
 Package only after the tests pass. The prepublish script compiles the TypeScript host; no external compiled patch is needed. `--no-dependencies` applies because the extension has no runtime npm dependencies; revisit it if dependencies are added. A VSIX can be copied and installed on another computer without cloning or build tools. [Packaging does not require Marketplace publication](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#packaging-extensions).
 
 ## Troubleshooting
 
-- **Older version still running:** reload the VS Code window after installation and check the version again.
+- **Old editor or JSON still showing:** disable the upstream extension, enable `kembl.infinite-canvas-cinema`, then use Reopen Editor With → Infinite Canvas Cinema. Replace old `infinite-canvas.canvasEditor` associations with `infinite-canvas-cinema.canvasEditor`. Reload the window if prompted.
 - **Canvas opens as text:** use Reopen Editor With and check the editor association.
 - **Missing image:** inspect the node's `file` path relative to the actual workspace folder. The node and tag are retained even when the file is absent.
 - **Works in another window only:** check the active profile and workspace enablement.

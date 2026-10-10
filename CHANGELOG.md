@@ -1,5 +1,10 @@
 # Cinema fork changes
 
+## 0.1.8
+
+- Use independent extension ID `kembl.infinite-canvas-cinema`, publisher `kembl`, and separate editor/command/language/setting identifiers.
+- Document migration from the shared upstream ID and enabling only one canvas extension at a time.
+
 ## 0.1.7
 
 - Integrate the 0.1.6 image/tag patch with a reconstructed TypeScript host.

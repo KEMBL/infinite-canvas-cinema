@@ -1,8 +1,8 @@
 {
-  "name": "infinite-canvas",
+  "name": "infinite-canvas-cinema",
   "displayName": "Infinite Canvas Cinema",
   "description": "Canvas reference boards with image tags, captions, clipboard copying and JSON/YAML tag export. Fork of Infinite Canvas.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -30,16 +30,16 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onCustomEditor:infinite-canvas.canvasEditor",
-    "onLanguage:canvas"
+    "onCustomEditor:infinite-canvas-cinema.canvasEditor",
+    "onLanguage:infinite-canvas-cinema"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "canvas",
+        "id": "infinite-canvas-cinema",
         "aliases": [
-          "Canvas",
-          "canvas"
+          "Canvas (Cinema)",
+          "infinite-canvas-cinema"
         ],
         "extensions": [
           ".canvas"
@@ -55,7 +55,7 @@
     ],
     "customEditors": [
       {
-        "viewType": "infinite-canvas.canvasEditor",
+        "viewType": "infinite-canvas-cinema.canvasEditor",
         "displayName": "Infinite Canvas Cinema",
         "selector": [
           {
@@ -67,76 +67,76 @@
     ],
     "configurationDefaults": {
       "files.associations": {
-        "*.canvas": "canvas"
+        "*.canvas": "infinite-canvas-cinema"
       },
       "workbench.editorAssociations": {
-        "*.canvas": "infinite-canvas.canvasEditor"
+        "*.canvas": "infinite-canvas-cinema.canvasEditor"
       }
     },
     "commands": [
       {
-        "command": "infinite-canvas.newCanvas",
+        "command": "infinite-canvas-cinema.newCanvas",
         "title": "New Canvas",
-        "category": "Infinite Canvas"
+        "category": "Infinite Canvas Cinema"
       },
       {
-        "command": "infinite-canvas.setTag",
+        "command": "infinite-canvas-cinema.setTag",
         "title": "Set tag",
-        "category": "Infinite Canvas"
+        "category": "Infinite Canvas Cinema"
       },
       {
-        "command": "infinite-canvas.copyTag",
+        "command": "infinite-canvas-cinema.copyTag",
         "title": "Copy @tag",
-        "category": "Infinite Canvas"
+        "category": "Infinite Canvas Cinema"
       },
       {
-        "command": "infinite-canvas.exportTags",
+        "command": "infinite-canvas-cinema.exportTags",
         "title": "Export tags",
-        "category": "Infinite Canvas"
+        "category": "Infinite Canvas Cinema"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "command": "infinite-canvas.newCanvas",
+          "command": "infinite-canvas-cinema.newCanvas",
           "group": "navigation"
         }
       ],
       "editor/title": [
         {
-          "command": "infinite-canvas.exportTags",
-          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "command": "infinite-canvas-cinema.exportTags",
+          "when": "activeCustomEditorId == infinite-canvas-cinema.canvasEditor",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "command": "infinite-canvas.setTag",
-          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "command": "infinite-canvas-cinema.setTag",
+          "when": "activeCustomEditorId == infinite-canvas-cinema.canvasEditor",
           "group": "1_modification"
         },
         {
-          "command": "infinite-canvas.copyTag",
-          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "command": "infinite-canvas-cinema.copyTag",
+          "when": "activeCustomEditorId == infinite-canvas-cinema.canvasEditor",
           "group": "1_modification"
         },
         {
-          "command": "infinite-canvas.exportTags",
-          "when": "activeCustomEditorId == infinite-canvas.canvasEditor",
+          "command": "infinite-canvas-cinema.exportTags",
+          "when": "activeCustomEditorId == infinite-canvas-cinema.canvasEditor",
           "group": "1_modification"
         }
       ]
     },
     "configuration": {
-      "title": "Infinite Canvas",
+      "title": "Infinite Canvas Cinema",
       "properties": {
-        "infinite-canvas.groqApiKey": {
+        "infinite-canvas-cinema.groqApiKey": {
           "type": "string",
           "default": "",
           "description": "OpenRouter API key for AI-powered idea generation (optional - fallback to mock responses if not provided)",
           "markdownDescription": "OpenRouter API key for AI-powered idea generation. Get your free API key at [openrouter.ai](https://openrouter.ai). If not provided, the extension will use mock responses."
         },
-        "infinite-canvas.useLegacyTagExportNames": {
+        "infinite-canvas-cinema.useLegacyTagExportNames": {
           "type": "boolean",
           "default": false,
           "description": "Use shared tags.json/tags.yaml export filenames instead of canvas-specific filenames."
@@ -164,10 +164,10 @@
   "bugs": {
     "url": "https://github.com/KEMBL/infinite-canvas-cinema/issues"
   },
-  "publisher": "LuisFernando",
+  "publisher": "kembl",
   "license": "MIT",
   "author": {
-    "name": "Infinite Canvas Team"
+    "name": "KEMBL and upstream Infinite Canvas contributors"
   },
   "galleryBanner": {
     "color": "#2D3748",
