@@ -8,7 +8,7 @@ Fork: [KEMBL/infinite-canvas-cinema](https://github.com/KEMBL/infinite-canvas-ci
 
 ## Baseline and status
 
-Current version: **0.1.8**, based on upstream `0.1.5` (commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`) and the `0.1.6` development patch. The host is maintained as TypeScript and builds from this repository. Version 0.1.8 uses the independent extension ID `kembl.infinite-canvas-cinema`, with its own editor, command, language, and setting identifiers. Enable only one canvas extension at a time.
+Current version: **0.1.9**, based on upstream `0.1.5` (commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`) and the `0.1.6` development patch. The host is maintained as TypeScript and builds from this repository. Version 0.1.8 uses the independent extension ID `kembl.infinite-canvas-cinema`, with its own editor, command, language, and setting identifiers. Enable only one canvas extension at a time.
 
 R1–R8 are implemented. Regression checks cover tag validation, data preservation, path handling, and export protection. A packaged VSIX was tested in VS Code for image drop/rendering, caption editing, clipboard copying, JSON/YAML export, and save/reopen. Further editor scenarios and external AI-provider calls remain acceptance work in the [roadmap](roadmap.md).
 

@@ -2,7 +2,7 @@
   "name": "infinite-canvas-cinema",
   "displayName": "Infinite Canvas Cinema",
   "description": "Canvas reference boards with image tags, captions, clipboard copying and JSON/YAML tag export. Fork of Infinite Canvas.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "engines": {
     "vscode": "^1.74.0"
   },

@@ -6,6 +6,8 @@ Requirements: [reference-board requirements](infinite-canvas-tag-requirements.md
 
 ## Implemented
 
+- ~~0.1.9: Great Bear / Big Dipper icon styled as connected flowchart star nodes, with editable SVG and packaged PNG.~~
+
 - ~~0.1.8: Separate extension ID `kembl.infinite-canvas-cinema`, with independent editor, command, language, and setting identifiers.~~
 
 - ~~R1: Original image resources, missing-image placeholders, and card deletion without deleting source files.~~
