@@ -1,38 +1,49 @@
-<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <!-- Black background -->
-  <rect width="128" height="128" fill="#1a1a1a" rx="12"/>
-  
-  <!-- Arrowhead marker definition -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Infinite Canvas Cinema — Great Bear flowchart</title>
+  <desc id="desc">The seven principal stars of Ursa Major's Big Dipper, drawn as gold star nodes connected by blue flowchart arrows on a midnight blue background.</desc>
   <defs>
-    <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-            refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#ffffff" />
+    <marker id="arrow" markerWidth="6" markerHeight="6" viewBox="0 0 6 6" refX="5" refY="3" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 6 3 L 0 6 Z" fill="#7cd6e9"/>
     </marker>
   </defs>
-  
-  <!-- Three circles -->
-  <!-- Circle 1 (top left) -->
-  <circle cx="40" cy="40" r="14" fill="#ffffff" stroke="none"/>
-  
-  <!-- Circle 2 (top right) -->
-  <circle cx="88" cy="40" r="14" fill="#ffffff" stroke="none"/>
-  
-  <!-- Circle 3 (bottom center) -->
-  <circle cx="64" cy="88" r="14" fill="#ffffff" stroke="none"/>
-  
-  <!-- Connecting arrows -->
-  <!-- Arrow from Circle 1 to Circle 2 -->
-  <line x1="54" y1="40" x2="74" y2="40" 
-        stroke="#ffffff" stroke-width="3" 
-        marker-end="url(#arrowhead)"/>
-  
-  <!-- Arrow from Circle 2 to Circle 3 -->
-  <line x1="82" y1="52" x2="70" y2="76" 
-        stroke="#ffffff" stroke-width="3" 
-        marker-end="url(#arrowhead)"/>
-  
-  <!-- Arrow from Circle 3 to Circle 1 -->
-  <line x1="52" y1="82" x2="46" y2="52" 
-        stroke="#ffffff" stroke-width="3" 
-        marker-end="url(#arrowhead)"/>
+  <rect width="256" height="256" rx="48" fill="#101b2d"/>
+  <g fill="none" stroke="#7cd6e9" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)">
+    <path d="M 51.00 129.18 L 60.00 121.41"/>
+    <path d="M 95.00 103.18 L 104.00 102.16"/>
+    <path d="M 139.00 108.40 L 144.00 111.03"/>
+    <path d="M 179.00 114.54 L 201.00 105.67"/>
+    <path d="M 218.18 114.00 L 213.16 158.00"/>
+    <path d="M 195.00 175.72 L 180.00 174.52"/>
+    <path d="M 161.62 157.00 L 162.27 140.00"/>
+  </g>
+  <g>
+    <g transform="translate(35 143)" aria-label="Alkaid">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+    <g transform="translate(79 105)" aria-label="Mizar">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+    <g transform="translate(123 100)" aria-label="Alioth">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+    <g transform="translate(163 121)" aria-label="Megrez">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+    <g transform="translate(220 98)" aria-label="Dubhe">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+    <g transform="translate(211 177)" aria-label="Merak">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+    <g transform="translate(161 173)" aria-label="Phecda">
+      <rect x="-15" y="-15" width="30" height="30" rx="8" fill="#20344b" stroke="#f2c76b" stroke-width="2.5"/>
+      <path d="M 0 -10 L 3 -3 L 10 0 L 3 3 L 0 10 L -3 3 L -10 0 L -3 -3 Z" fill="#fff3d1"/>
+    </g>
+  </g>
 </svg>

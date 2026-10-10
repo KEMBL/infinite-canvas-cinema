@@ -1,5 +1,9 @@
 # Cinema fork changes
 
+## 0.1.9
+
+- Replace the upstream icon with the Great Bear / Big Dipper, styled as seven star nodes connected by flowchart arrows. Include the editable SVG and a 256px PNG for VS Code.
+
 ## 0.1.8
 
 - Use independent extension ID `kembl.infinite-canvas-cinema`, publisher `kembl`, and separate editor/command/language/setting identifiers.
