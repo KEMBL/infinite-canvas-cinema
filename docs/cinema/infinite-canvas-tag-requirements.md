@@ -8,7 +8,7 @@ Fork: [KEMBL/infinite-canvas-cinema](https://github.com/KEMBL/infinite-canvas-ci
 
 ## Baseline and status
 
-Integrated version: **0.1.7**, based on upstream `0.1.5` (commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`) and the `0.1.6` development patch. The host is maintained as TypeScript and builds from this repository.
+Current version: **0.1.8**, based on upstream `0.1.5` (commit `4f8cbabc02c072faeef8590b00d238ebca8ff087`) and the `0.1.6` development patch. The host is maintained as TypeScript and builds from this repository. Version 0.1.8 uses the independent extension ID `kembl.infinite-canvas-cinema`, with its own editor, command, language, and setting identifiers. Enable only one canvas extension at a time.
 
 R1–R8 are implemented. Regression checks cover tag validation, data preservation, path handling, and export protection. A packaged VSIX was tested in VS Code for image drop/rendering, caption editing, clipboard copying, JSON/YAML export, and save/reopen. Further editor scenarios and external AI-provider calls remain acceptance work in the [roadmap](roadmap.md).
 
@@ -64,7 +64,7 @@ Show each image with its `@tag` caption. Untagged cards display a muted `set tag
 
 ### R4 — Edit without leaving the board
 
-Support caption editing, a **Set tag** context action, or `T` with a file node selected. Retain `infinite-canvas.setTag`. Update canvas JSON through the existing document-save flow.
+Support caption editing, a **Set tag** context action, or `T` with a file node selected. Provide `infinite-canvas-cinema.setTag`. Update canvas JSON through the existing document-save flow.
 
 The integrated editor includes caption/image double-click editing, a context menu, `T`, and a VS Code input-box command. Packaged-editor acceptance covered the caption input; the remaining entry points still need individual UI checks.
 
@@ -74,7 +74,7 @@ Suggest the basename without its extension, sanitised to allowed characters. Do 
 
 ### R6 — Export a reliable catalog
 
-Retain `infinite-canvas.exportTags`, titled **Infinite Canvas: Export tags**. Export tagged `file` nodes with source paths; include `path`, `canvas`, and `nodeId` as strings:
+Provide `infinite-canvas-cinema.exportTags`, titled **Infinite Canvas Cinema: Export tags**. Export tagged `file` nodes with source paths; include `path`, `canvas`, and `nodeId` as strings:
 
 ```json
 {
@@ -89,7 +89,7 @@ Retain `infinite-canvas.exportTags`, titled **Infinite Canvas: Export tags**. Ex
 - JSON and YAML must represent the same data, including string keys and fields.
 - Paths must be workspace-relative with POSIX slashes. Scripts consume the catalog rather than canvas coordinates.
 - Target default filenames: `<canvas-basename>.tags.json` and `<canvas-basename>.tags.yaml`, beside the canvas. Example: `references.tags.json` and `references.tags.yaml`.
-- Shared `tags.json` and `tags.yaml` are available only through the explicit `infinite-canvas.useLegacyTagExportNames` compatibility setting; they replace the previous folder catalog rather than merging canvases.
+- Shared `tags.json` and `tags.yaml` are available only through the explicit `infinite-canvas-cinema.useLegacyTagExportNames` compatibility setting; they replace the previous folder catalog rather than merging canvases.
 - Confirm replacement when either output exists. Cancelling leaves both unchanged. Report filesystem errors rather than treating them as missing files.
 - Reject duplicate or invalid non-empty tags in imported JSON before writing. Do not silently overwrite catalog entries.
 - Preserve every allowed tag, including `__proto__`, as a data key. Quote YAML strings as needed to preserve numeric-looking IDs and scalar-like tags.
@@ -99,7 +99,7 @@ These export behaviors are implemented in 0.1.7. JSON/YAML catalogs and cancella
 
 ### R7 — Copy @tag
 
-Provide **Copy @tag**, including `infinite-canvas.copyTag`. Copy the tag with one leading `@`. For an untagged file node, open tag editing first.
+Provide `Copy @tag`, including `infinite-canvas-cinema.copyTag`. Copy the tag with one leading `@`. For an untagged file node, open tag editing first.
 
 ### R8 — Preserve canvas data on save/load
 

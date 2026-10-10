@@ -12,13 +12,13 @@ type TagCatalog = Record<string, { path: string; canvas: string; nodeId: string 
 const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const TAG_CHAR_RE = /^[A-Za-z0-9_-]+$/;
 export function activate(context: vscode.ExtensionContext): void {
-    console.log('Infinite Canvas extension is now active!');
+    console.log('Infinite Canvas Cinema extension is now active!');
     const provider = new CanvasEditorProvider(context.extensionUri);
-    const registration = vscode.window.registerCustomEditorProvider('infinite-canvas.canvasEditor', provider, {
+    const registration = vscode.window.registerCustomEditorProvider('infinite-canvas-cinema.canvasEditor', provider, {
         webviewOptions: { retainContextWhenHidden: true },
         supportsMultipleEditorsPerDocument: false
     });
-    const newCanvasCommand = vscode.commands.registerCommand('infinite-canvas.newCanvas', async () => {
+    const newCanvasCommand = vscode.commands.registerCommand('infinite-canvas-cinema.newCanvas', async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             vscode.window.showErrorMessage('Please open a workspace to create a new canvas');
@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext): void {
             await vscode.commands.executeCommand('vscode.open', filePath);
         }
     });
-    const setTagCommand = vscode.commands.registerCommand('infinite-canvas.setTag', async () => {
+    const setTagCommand = vscode.commands.registerCommand('infinite-canvas-cinema.setTag', async () => {
         const tag = await vscode.window.showInputBox({
             prompt: 'Tag for the selected file node (stored without @)',
             placeHolder: 'character_A_v1',
@@ -66,12 +66,12 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.showWarningMessage('Open a canvas to set a tag');
         }
     });
-    const copyTagCommand = vscode.commands.registerCommand('infinite-canvas.copyTag', async () => {
+    const copyTagCommand = vscode.commands.registerCommand('infinite-canvas-cinema.copyTag', async () => {
         if (!provider.postToActiveWebview({ type: 'copyTag' })) {
             vscode.window.showWarningMessage('Open a canvas to copy a tag');
         }
     });
-    const exportTagsCommand = vscode.commands.registerCommand('infinite-canvas.exportTags', async () => {
+    const exportTagsCommand = vscode.commands.registerCommand('infinite-canvas-cinema.exportTags', async () => {
         const document = provider.getActiveDocument() || getActiveCanvasTextDocument();
         if (!document) {
             vscode.window.showWarningMessage('Open a .canvas file to export tags');
@@ -139,7 +139,7 @@ async function exportTagsForDocument(document: vscode.TextDocument): Promise<voi
     }
     const dir = vscode.Uri.joinPath(document.uri, '..');
     const basename = path.basename(document.uri.fsPath).replace(/\.canvas$/i, '');
-    const legacy = vscode.workspace.getConfiguration('infinite-canvas').get<boolean>('useLegacyTagExportNames', false);
+    const legacy = vscode.workspace.getConfiguration('infinite-canvas-cinema').get<boolean>('useLegacyTagExportNames', false);
     const exportBase = legacy ? 'tags' : basename + '.tags';
     const jsonUri = vscode.Uri.joinPath(dir, exportBase + '.json');
     const yamlUri = vscode.Uri.joinPath(dir, exportBase + '.yaml');
@@ -166,7 +166,7 @@ async function exportTagsForDocument(document: vscode.TextDocument): Promise<voi
     vscode.window.showInformationMessage('Exported ' + Object.keys(catalog).length + ' tags to ' + vscode.workspace.asRelativePath(jsonUri));
 }
 class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
-    private static readonly viewType = 'infinite-canvas.canvasEditor';
+    private static readonly viewType = 'infinite-canvas-cinema.canvasEditor';
     private readonly extensionUri: vscode.Uri;
     private isSaving: boolean;
     private webviews: Map<string, { panel: vscode.WebviewPanel; document: vscode.TextDocument }>;
@@ -496,7 +496,7 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
     }
     private async getGroqApiKey(): Promise<string | null> {
         try {
-            const config = vscode.workspace.getConfiguration('infinite-canvas');
+            const config = vscode.workspace.getConfiguration('infinite-canvas-cinema');
             const configApiKey = config.get<string>('groqApiKey');
             if (configApiKey && configApiKey.trim()) {
                 return configApiKey.trim();

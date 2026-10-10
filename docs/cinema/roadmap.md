@@ -6,6 +6,8 @@ Requirements: [reference-board requirements](infinite-canvas-tag-requirements.md
 
 ## Implemented
 
+- ~~0.1.8: Separate extension ID `kembl.infinite-canvas-cinema`, with independent editor, command, language, and setting identifiers.~~
+
 - ~~R1: Original image resources, missing-image placeholders, and card deletion without deleting source files.~~
 - ~~R1: Resolve against the actual workspace root, preserve nested drop paths, and reject unsupported external references.~~
 - ~~R2: One optional tag per file node; normalisation, clearing, character validation, and duplicate rejection.~~
