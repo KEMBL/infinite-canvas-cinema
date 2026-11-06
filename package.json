@@ -80,6 +80,11 @@
         "category": "Infinite Canvas Cinema"
       },
       {
+        "command": "infinite-canvas-cinema.addImagesToCanvas",
+        "title": "Add Image to Canvas",
+        "category": "Infinite Canvas Cinema"
+      },
+      {
         "command": "infinite-canvas-cinema.setTag",
         "title": "Set tag",
         "category": "Infinite Canvas Cinema"
@@ -99,6 +104,11 @@
       "explorer/context": [
         {
           "command": "infinite-canvas-cinema.newCanvas",
+          "group": "navigation"
+        },
+        {
+          "command": "infinite-canvas-cinema.addImagesToCanvas",
+          "when": "resourceExtname =~ /\\.(png|jpe?g|gif|webp|bmp|svg)$/i",
           "group": "navigation"
         }
       ],
@@ -148,7 +158,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
-    "test": "npm run compile && node test/regression.cjs && node test/history.cjs && node test/history-host.cjs"
+    "test": "npm run compile && node test/regression.cjs && node test/history.cjs && node test/history-host.cjs && node test/drop.cjs && node test/drop-host.cjs && node test/explorer.cjs && node test/diagnostics.cjs && node test/diagnostics-bootstrap.cjs"
   },
   "devDependencies": {
     "@types/node": "16.x",

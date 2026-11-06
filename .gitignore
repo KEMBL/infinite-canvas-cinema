@@ -23,3 +23,5 @@ CLAUDE.md
 .mcp.json
 .vscode/mcp.json
 scripts/serena-bootstrap.sh
+
+/.logs/canvas-drag-drop.jsonl

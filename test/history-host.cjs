@@ -32,7 +32,7 @@ const vscode = {
   window:{async showTextDocument(){}, showWarningMessage(){}, showErrorMessage(text){errors.push(text);}},
   commands:{async executeCommand(){}}
 };
-const context=vm.createContext({require:name=>name==='vscode'?vscode:require(name),exports:{},Buffer,console});
+const context=vm.createContext({require:name=>name==='vscode'?vscode:name==='./dragDiagnostics'?require('../out/dragDiagnostics'):require(name),exports:{},Buffer,console});
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../out/extension.js'),'utf8')+'\nglobalThis.Provider=CanvasEditorProvider;',context);
 const panel={active:true,webview:{cspSource:'test',asWebviewUri:()=>'',postMessage(m){messages.push(m);},onDidReceiveMessage(fn){onMessage=fn;}},onDidDispose(){}};
 (async()=>{

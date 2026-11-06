@@ -1,0 +1,20 @@
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
+const {DragDiagnostics}=require('../out/dragDiagnostics');
+(async()=>{
+ const dir=await fs.promises.mkdtemp(path.join(os.tmpdir(),'canvas-diag-'));const log=path.join(dir,'drag.jsonl');
+ const diag=new DragDiagnostics(log);
+ diag.record('webview.capture',{eventType:'drop',fileSizes:[42],fileTypes:['image/png'],types:['Files'],content:'SECRET',name:'SECRET',sha256:'SECRET'});
+ diag.record('webview.payload',{pathCount:1,uriPresent:true});await diag.flush();
+ const lines=(await fs.promises.readFile(log,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.deepEqual(lines.map(x=>x.event),['webview.capture','webview.payload']);
+ assert.deepEqual(lines[0].fileSizes,[42]); assert.equal(lines[0].content,undefined);assert.equal(lines[0].name,undefined);assert.equal(lines[0].sha256,undefined);
+ await fs.promises.writeFile(log,'x'.repeat(2*1024*1024));diag.record('host.ready',{version:1});await diag.flush();
+ assert.equal(JSON.parse((await fs.promises.readFile(log,'utf8')).trim()).event,'host.ready');
+ for(let i=0;i<520;i++) diag.record('webview.capture',{eventId:i});
+ await diag.flush();
+ const events=(await fs.promises.readFile(log,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.ok(events.some(e=>e.event==='diagnostics.dropped' && e.dropCount>0));
+ const blocked=new DragDiagnostics(path.join(log,'child'));blocked.record('host.ready');await blocked.flush();
+ await fs.promises.rm(dir,{recursive:true,force:true});
+ console.log('Development diagnostics filtering, ordering, bounds and failure isolation checks passed');
+})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -3,7 +3,7 @@
 **Owner:** PM (main thread)  
 **Date:** 2026-11-06  
 **Track:** Investigation, followed by a bounded correction if supported by evidence.  
-**Status:** Initial startup correction and lifecycle investigation independently accepted.
+**Status:** Completed: live use verified, native Running user-confirmed, configured latest image verified current.
 
 ## Authority and scope
 
@@ -126,6 +126,39 @@ Team token/cost accounting is unavailable; do not estimate it.
 
 ## Follow-up: orphan container lifecycle
 
+**Reopened investigation (history):** The user initially reported native VS Code Start still failed.
+Prior terminal/lifecycle qualification did not exercise that UI path. PM owns
+native-client reproduction through Computer Use; Bach owns fresh logs, effective
+launch source/environment and supported engineering correction. A live Serena
+tool attached to this Codex chat answered initial instructions, which does not
+establish the separate VS Code client state. Preserve unrelated sessions and
+work; no global app restart or container cleanup. Native-client acceptance is
+required before claiming the original issue resolved. The user subsequently
+clarified that no current problem remained and asked specifically for actual
+agent use of the connected Serena tools. That clarification superseded further
+UI troubleshooting and compatibility implementation. The user then explicitly
+confirmed a new Start result: Running with tools available. This is user-reported
+native acceptance, separate from PM's direct MCP tool evidence below.
+
+Fresh evidence now identifies the intended project: `agenthost.log` line 302
+names `o:\work\my\infinite-canvas-cinema` for Copilot session
+`1521b12d-ed23-475c-8a0a-387e9535abdc`. That same session's lines 318 and 331
+at 19:11:47 and 19:12:02 report JSON-RPC `-32022`: the connection is serving
+`2026-07-28`, then rejects `initialize` requesting `2025-11-25`. Server startup
+and memory-facade exclusion succeeded before the error. This is the actual
+project's newer failure, separate from the historical daemon-unavailable issue.
+Bach reproduced the exact error by sending modern `server/discover` followed by
+legacy `initialize` to the current server on the same stream. This validates the
+failure mechanism; exact native-client timing remains to be captured.
+
+The matching upstream [Copilot report](https://github.com/github/copilot-cli/issues/4525)
+describes the startup-latency race and subsequent client fixes; it is supporting
+evidence, not proof of this installed client's version or timing. PM's Computer
+Use attempts reached the correct window's accessibility tree, but screenshot
+capture repeatedly timed out and element geometry was unavailable. No native
+Start action was successfully performed by automation. Continue source/runtime
+investigation and use an actual new client event for final qualification.
+
 The user reported having seen accumulated Serena instances and questioned whether
 removing fixed container names would worsen that behavior. The follow-up scope
 is to establish the actual disconnect behavior and, where justified, implement
@@ -188,3 +221,79 @@ cleanup was added. If accumulation recurs, inspect the affected container's
 workspace, image, state and actual attached-client ownership before deciding on
 cleanup. Session capture remains `not needed`: this updated ledger and guide
 preserve the follow-up motivation, measurements, decision, review and next action.
+
+## Final clarified acceptance: actual agent use
+
+The user clarified: no current problem remains; verify that the agent can
+actually use Serena. PM successfully called the connected MCP tools themselves,
+not a subprocess substitute. `initial_instructions` activated `/workspace` with
+the TypeScript backend and supplied session `a37c7fb3`. Subsequent successful
+`serena_repl` calls performed these read-only operations:
+
+- `get_symbols_overview` for `src/extension.ts` returned the real functions,
+  `CanvasEditorProvider` and its methods.
+- `find_symbol` read `CanvasEditorProvider/recoverCanvas`, including its actual
+  source body (zero-based lines 337-341 at the time of the query).
+- `find_referencing_symbols` found the class construction in `activate/provider`.
+- `search_for_pattern` found `registerCustomEditorProvider` and its options.
+- `hasattr(s, 'mem')` returned false, preserving the memory-disabled contract.
+
+The diagnostic trace-only design was independently accepted at 9.5/10 after
+provisional compatibility concerns (8.7/10); compatibility mode was never
+implemented or activated. After the user's clarification, Bach restored
+`.vscode/mcp.json` to its direct `latest` image / bash bootstrap command and
+removed the owned `scripts/serena-stdio-probe.py`. PM and Gilbert independently
+confirmed restoration and probe absence. Codex and `.mcp.json` were unchanged.
+The already downloaded `2.1.0` image remains an incidental local cache entry;
+no configuration was switched to it. Sanitized handshake metadata remains at
+`.serena-cache/vscode-handshake-probe.log`. One automatic traced attempt showed
+legacy initialization completing, without proving a tool call for that event.
+Owned test processes were closed; no pre-existing container was stopped.
+
+Gilbert's final focused review accepted restoration and direct connected-agent
+tool evidence at 9.7/10, with no material findings. All terminal results were
+received and dispositioned. The user separately replied that Start now reports
+Running and tools are visible. Native UI status is user-confirmed; semantic
+navigation is directly tool-verified. The earlier `-32022` event remains accurate
+historical evidence, not a claim that this currently working session is broken.
+No further compatibility workaround or restart is required for the accepted scope.
+Session capture remains `not needed`: this ledger preserves the clarification,
+verification, restoration, retained diagnostic data, limits and final state.
+
+## Tool count and update request
+
+The user observes two exposed tools, recalls a larger toolset and requests an
+update check. PM called the connected `s.cfg.get_current_config()`: the active
+server reports `2.1.1.dev0-ede329aa-dirty`, interface REPL, TypeScript LSP ready,
+and two active tools (`initial_instructions`, `serena_repl`). The many familiar
+standalone tools remain listed as inactive in this interface; their operations
+are accessed through REPL facades, as the successful live semantic calls above
+demonstrate. This is an interface choice, not evidence that only two operations
+are available.
+
+The [official configuration documentation](https://github.com/oraios/serena/blob/main/docs/02-usage/050_configuration.md#agent-interfaces)
+describes the tools and REPL interfaces, with REPL introduced in v2. The
+[latest stable release](https://github.com/oraios/serena/releases/tag/v2.1.0)
+is v2.1.0 at this check. Preserve the current interface and avoid an unrequested
+downgrade from the development image to stable. Bach is pulling the configured
+`latest` tag and comparing image identity. Existing active sessions must remain
+running; a cached image update is distinct from replacement of their processes.
+
+Bach executed `docker pull ghcr.io/oraios/serena:latest`; Docker reported
+`Image is up to date`. Before/after repository digest was unchanged:
+`sha256:0b0ff857c2eca5094aa3b4f406e58ba3cacf647b20d237adcfbbeadffc14cd65`.
+Local image ID remained
+`sha256:e1954608a1a3a3571e790ba806718987ab4b51700a15973d186b3bb26affcb14`,
+also used by an inspected existing ICC workspace container. No image upgrade,
+interface switch or active-container restart was needed. The current connected
+server version and cached latest therefore already match the checked image.
+A concise REPL/tools explanation with the official documentation link was added
+to the existing Serena guide; its four local links passed validation. This small
+documentation clarification and unchanged-image pull need no repeated broad
+review or semantic rerun after the already-passed live checks.
+
+All delegated results have been received and dispositioned. Final scope is
+fulfilled: actual connected-agent use works, the user reports native Running,
+the two-tool interface is explained, and the configured image was freshly checked.
+Capture remains `not needed` because this ledger and the updated canonical guide
+retain the evidence and distinction between development latest and stable release.

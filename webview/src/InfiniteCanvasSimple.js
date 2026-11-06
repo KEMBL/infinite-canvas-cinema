@@ -35,6 +35,7 @@ function isValidTag(tag) {
 function suggestTagFromPath(filePath) {
     const base = toPosixPath(filePath).split('/').pop() || '';
     const noExt = base.replace(/\.[^.]+$/, '');
+    if (isValidTag(noExt)) return noExt;
     return normalizeTag(noExt).replace(/[^A-Za-z0-9_-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
 }
 
@@ -2278,6 +2279,8 @@ class InputHandler {
     }
     
     handleDrop(e) {
+        this.activeDropEventId = window.canvasDropEventId?.(e);
+        window.canvasDiagnostics?.('webview.canvas_drop', {eventId: this.activeDropEventId, shift: e.shiftKey, x: e.clientX, y: e.clientY});
         e.preventDefault();
         
         const rect = this.canvas.getBoundingClientRect();
@@ -2297,8 +2300,10 @@ class InputHandler {
         const droppedPaths = uriList
             .split(/\r?\n/)
             .map(line => line.trim())
-            .filter(line => line && !line.startsWith('#'));
+            .filter(line => line && !line.startsWith('#') &&
+                (line.includes('/') || line.includes('\\')));
 
+        window.canvasDiagnostics?.('webview.payload', {eventId: this.activeDropEventId, pathCount: droppedPaths.length, fileCount: e.dataTransfer?.files?.length || 0, uriPresent: Boolean(e.dataTransfer?.getData('text/uri-list')), textPresent: Boolean(e.dataTransfer?.getData('text/plain'))});
         if (droppedPaths.length) {
             droppedPaths.forEach((droppedPath, index) => {
                 if (isImageFile(droppedPath) || /\.md$/i.test(droppedPath) || droppedPath.includes('/') || droppedPath.includes('\\')) {
@@ -2314,9 +2319,11 @@ class InputHandler {
             console.log('📁 Dropped files:', files);
             
             files.forEach((file, index) => {
-                const absPath = file.path || file.name;
+                const absPath = file.path;
                 if (isImageFile(file.name) || isImageFile(absPath)) {
-                    this.createFileNodeFromPath(absPath, canvasX + (index * 50), canvasY + (index * 50));
+                    const x = canvasX + (index * 50), y = canvasY + (index * 50);
+                    if (absPath) this.createFileNodeFromPath(absPath, x, y);
+                    else this.resolveDroppedImage(file, x, y);
                     return;
                 }
                 if (file.name.endsWith('.md') || file.type === 'text/markdown') {
@@ -2326,11 +2333,69 @@ class InputHandler {
         }
     }
     
+    invalidatePendingDrops() {
+        if (!this.acceptingResolvedDrop) {
+            this.dropRevision = (this.dropRevision || 0) + 1;
+            if (!this.acceptingCanvasAdd) {
+                for (const cancel of this.pendingCanvasAdds || []) cancel();
+            }
+        }
+    }
+
+    async resolveDroppedImage(file, x, y) {
+        const revision = this.dropRevision || 0;
+        const eventId = this.activeDropEventId;
+        const requestId = this.nextDropRequestId = (this.nextDropRequestId || 0) + 1;
+        window.canvasDiagnostics?.('webview.hash_start', {eventId, requestId, revision, fileSizes: [file.size], fileTypes: [file.type]});
+        let stage = 'read_file';
+        try {
+            const bytes = await file.arrayBuffer();
+            stage = 'hash_file';
+            const digest = await crypto.subtle.digest('SHA-256', bytes);
+            const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+            window.canvasDiagnostics?.('webview.lookup_post', {eventId, requestId, revision});
+            window.vsCodeAPI?.postMessage({type: 'resolveDroppedImage', name: file.name, size: file.size, sha256, x, y, revision, requestId, eventId});
+        } catch (error) {
+            window.canvasDiagnostics?.('webview.hash_error', {eventId, requestId, reason: stage, errorName: error?.name || 'unknown'});
+            window.vsCodeAPI?.postMessage({type: 'showWarning', text: 'Could not identify the dropped image: ' + String(error)});
+        }
+    }
+
+    acceptResolvedDrop(message) {
+        window.canvasDiagnostics?.('webview.lookup_result', {eventId: message.eventId, requestId: message.requestId, revision: message.revision});
+        if (message.revision !== (this.dropRevision || 0)) {
+            window.canvasDiagnostics?.('webview.lookup_stale', {eventId: message.eventId, requestId: message.requestId, revision: message.revision});
+            window.vsCodeAPI?.postMessage({type: 'showWarning', text: 'The canvas changed while locating the image. Please drop it again.'});
+            return;
+        }
+        // Sibling images from the same drop share a revision; creating one
+        // must not invalidate the others, unlike a user edit or document load.
+        this.acceptingResolvedDrop = true;
+        try {
+            this.createFileNodeFromPath(message.filePath, message.x, message.y);
+        } finally {
+            this.acceptingResolvedDrop = false;
+        }
+    }
+
     createFileNodeFromPath(filePath, x, y) {
         try {
             const relative = this.convertToRelativePath(filePath);
-            return this.canvasState.createFileNode(relative, x, y);
+            const node = this.canvasState.createFileNode(relative, x, y);
+            window.canvasDiagnostics?.('webview.node_created', {x, y, relativePath: relative, tagged: Boolean(node.tag), nodeCount: this.canvasState.nodes.length});
+            if (isImageFile(relative)) {
+                const suggestion = suggestTagFromPath(relative);
+                const filenameTag = toPosixPath(relative).split('/').pop().replace(/\.[^.]+$/, '');
+                if (!node.tag) {
+                    const text = suggestion ? `Tag @${suggestion} is already used; the new image has no tag.` : 'The image filename does not contain a valid tag; the new image has no tag.';
+                    window.vsCodeAPI?.postMessage({type: 'showWarning', text});
+                } else if (node.tag !== filenameTag) {
+                    window.vsCodeAPI?.postMessage({type: 'showWarning', text: `The filename was normalized to tag @${node.tag}.`});
+                }
+            }
+            return node;
         } catch (error) {
+            window.canvasDiagnostics?.('webview.node_error', {errorName: error?.name || 'unknown', reason: error?.message === 'References must be inside the canvas workspace folder' ? 'outside_workspace' : error?.message === 'References must stay inside the workspace folder' ? 'path_traversal' : error?.message === 'Only local workspace files can be referenced' ? 'unsupported_scheme' : 'other'});
             window.vsCodeAPI?.postMessage({type: 'showWarning', text: error.message});
         }
     }
@@ -2338,7 +2403,12 @@ class InputHandler {
     convertToRelativePath(filePath) {
         let input = String(filePath || '').trim();
         if (input.startsWith('file:')) {
-            input = decodeURIComponent(new URL(input).pathname).replace(/^\/([A-Za-z]:)/, '$1');
+            const uri = new URL(input);
+            if (uri.hostname && uri.hostname.toLowerCase() !== 'localhost') throw new Error('References must be inside the canvas workspace folder');
+            input = decodeURIComponent(uri.pathname).replace(/^\/([A-Za-z]:)/, '$1');
+        }
+        if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(input) && !/^[A-Za-z]:[\\/]/.test(input)) {
+            throw new Error('Only local workspace files can be referenced');
         }
         input = toPosixPath(input);
         const root = toPosixPath(window.workspaceRoot || '').replace(/\/$/, '');

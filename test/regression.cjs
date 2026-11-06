@@ -121,7 +121,7 @@ const vscode = {
   }},
   window: {showErrorMessage(text) {errors.push(text);}, showInformationMessage() {}, async showWarningMessage(text) {warnings.push(text); return warningChoice;}}
 };
-const host = vm.createContext({require: name => name === 'vscode' ? vscode : require(name), exports: {}, Buffer, console: quiet});
+const host = vm.createContext({require: name => name === 'vscode' ? vscode : name === './dragDiagnostics' ? require('../out/dragDiagnostics') : require(name), exports: {}, Buffer, console: quiet});
 vm.runInContext(fs.readFileSync(path.join(patch, 'out/extension.js'), 'utf8') + '\nglobalThis.audit = {exportTagsForDocument, catalogToYaml};', host);
 const document = nodes => ({uri: {path: '/workspace/boards/references.canvas', fsPath:'/workspace/boards/references.canvas'}, getText: () => JSON.stringify({nodes, edges: []})});
 awaitMain();

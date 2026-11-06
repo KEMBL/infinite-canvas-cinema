@@ -1,0 +1,42 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const messages=[],listeners={},timers=new Map(),frames=[];let id=0, resizeCallback, disconnected=0;const resizeCallbacks=[];
+const ui=vm.createContext({URL,requestAnimationFrame(fn){frames.push(fn);},ResizeObserver:class {constructor(fn){resizeCallback=fn;resizeCallbacks.push(fn);} observe(){} disconnect(){disconnected++;}},console:{log(){},warn(){},error(){}},setTimeout(fn){timers.set(++id,fn);return id;},clearTimeout(id){timers.delete(id);},
+  document:{readyState:'loading',addEventListener(){}},window:{workspaceRoot:'C:/workspace',vsCodeAPI:{postMessage(m){messages.push(m);}},addEventListener(type,fn){listeners[type]=fn;}}});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../webview/src/InfiniteCanvasSimple.js'),'utf8').replace('export class InfiniteCanvas','class InfiniteCanvas')+'\nglobalThis.State=CanvasState;globalThis.Handler=InputHandler;',ui);
+const main=fs.readFileSync(path.join(__dirname,'../webview/main.js'),'utf8').replace("import { InfiniteCanvas } from './src/InfiniteCanvasSimple.js';",'').replace(/\/\/ Initialize the app[\s\S]*$/,'globalThis.App=VSCodeCanvasApp;');
+vm.runInContext(main,ui);
+const app=new ui.App(), state=new ui.State(), handler=Object.create(ui.Handler.prototype);
+handler.canvasState=state; handler.handleMouseDown=()=>{};handler.handleMouseUp=()=>{};handler.resetDragState=()=>{};
+const canvas={clientWidth:800,clientHeight:600,addEventListener(){}};
+app.canvas={canvas,canvasState:state,inputHandler:handler,requestRender(){}};app.isInitialized=true;app.setupVSCodeIntegration();ui.window.canvasApp=app;
+app.loadCanvasContent('{"nodes":[],"edges":[]}',1);messages.length=0;
+listeners.message({data:{type:'addImagesToCanvas',paths:['refs/a.png','refs/b.png']}});
+frames.shift()();
+assert.equal(state.nodes.length,2);assert.deepEqual(Array.from(state.nodes,n=>n.tag),['a','b']);
+assert.equal(state.nodes[0].x,400);assert.equal(state.nodes[0].y,300);assert.equal(state.nodes[1].x,440);
+app.flushSave();const saves=messages.filter(m=>m.type==='save');assert.equal(saves.length,1);
+assert.equal(JSON.parse(saves[0].content).nodes.length,2);
+canvas.clientWidth=0; canvas.clientHeight=0;
+listeners.message({data:{type:'addImagesToCanvas',paths:['refs/c.png']}});
+frames.shift()(); assert.equal(state.nodes.length,2);assert.ok(resizeCallback);
+canvas.clientWidth=1000;canvas.clientHeight=800;resizeCallback();
+assert.equal(state.nodes.length,3);assert.equal(state.nodes[2].x,500);assert.equal(state.nodes[2].y,400);
+for (const operation of ['undo', 'reload']) {
+  canvas.clientWidth=0;canvas.clientHeight=0;
+  listeners.message({data:{type:'addImagesToCanvas',paths:[`refs/${operation}.png`]}});
+  frames.shift()();const callback=resizeCallback;const beforeDisconnect=disconnected;
+  if(operation==='undo') handler.invalidatePendingDrops();
+  else app.loadCanvasContent(JSON.stringify(state.exportCanvasData()),2);
+  assert.equal(disconnected,beforeDisconnect+1);
+  canvas.clientWidth=800;canvas.clientHeight=600;callback();
+  assert.equal(state.nodes.length,3);
+}
+canvas.clientWidth=0;canvas.clientHeight=0;
+listeners.message({data:{type:'addImagesToCanvas',paths:['refs/d.png']}});
+listeners.message({data:{type:'addImagesToCanvas',paths:['refs/e.png']}});
+frames.shift()();frames.shift()();
+const siblingCallbacks=resizeCallbacks.slice(-2);
+canvas.clientWidth=800;canvas.clientHeight=600;
+siblingCallbacks[0]();siblingCallbacks[1]();
+assert.deepEqual(Array.from(state.nodes.slice(-2),n=>n.file),['refs/d.png','refs/e.png']);
+console.log('Explorer add-to-canvas grouping, visible-layout and cancellation checks passed');

@@ -12,6 +12,7 @@
             "problemMatcher": "$tsc-watch"
         },
         {
+            "label": "compile-extension",
             "type": "npm",
             "script": "compile",
             "group": "build",

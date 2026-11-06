@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { createHash } from 'crypto';
+import * as fs from 'fs';
+import { DragDiagnostics } from './dragDiagnostics';
 
 interface CanvasFileNode {
     id?: unknown;
@@ -13,7 +16,18 @@ const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const TAG_CHAR_RE = /^[A-Za-z0-9_-]+$/;
 export function activate(context: vscode.ExtensionContext): void {
     console.log('Infinite Canvas Cinema extension is now active!');
-    const provider = new CanvasEditorProvider(context.extensionUri);
+    const diagnosticsEnabled = context.extensionMode === vscode.ExtensionMode.Development || process.env.CANVAS_DRAG_DIAGNOSTICS === '1';
+    const diagnostics = diagnosticsEnabled ? new DragDiagnostics(path.join(context.extensionPath, '.logs', 'canvas-drag-drop.jsonl')) : undefined;
+    if (diagnostics) {
+        const hash = (relative: string): string => {
+            try { return createHash('sha256').update(fs.readFileSync(path.join(context.extensionPath, relative))).digest('hex'); }
+            catch { return 'unavailable'; }
+        };
+        diagnostics.record('activation', {extensionPath: context.extensionPath, extensionVersion: context.extension.packageJSON.version,
+            vscodeVersion: vscode.version, mode: context.extensionMode === vscode.ExtensionMode.Development ? 'development' : 'explicit',
+            hostHash: hash('out/extension.js'), mainHash: hash('webview/main.js'), canvasHash: hash('webview/src/InfiniteCanvasSimple.js')});
+    }
+    const provider = new CanvasEditorProvider(context.extensionUri, diagnostics);
     const registration = vscode.window.registerCustomEditorProvider('infinite-canvas-cinema.canvasEditor', provider, {
         webviewOptions: { retainContextWhenHidden: true },
         supportsMultipleEditorsPerDocument: false
@@ -71,6 +85,9 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.window.showWarningMessage('Open a canvas to copy a tag');
         }
     });
+    const addImagesCommand = vscode.commands.registerCommand('infinite-canvas-cinema.addImagesToCanvas', async (uri: vscode.Uri, uris?: vscode.Uri[]) => {
+        await provider.addImagesToCanvas(uris?.length ? uris : uri ? [uri] : []);
+    });
     const exportTagsCommand = vscode.commands.registerCommand('infinite-canvas-cinema.exportTags', async () => {
         const document = provider.getActiveDocument() || getActiveCanvasTextDocument();
         if (!document) {
@@ -79,7 +96,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         await exportTagsForDocument(document);
     });
-    context.subscriptions.push(registration, newCanvasCommand, setTagCommand, copyTagCommand, exportTagsCommand);
+    context.subscriptions.push(registration, newCanvasCommand, setTagCommand, copyTagCommand, exportTagsCommand, addImagesCommand);
 }
 export function deactivate(): void { }
 function normalizeTag(raw: unknown): string {
@@ -170,7 +187,8 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly extensionUri: vscode.Uri;
     private webviews: Map<string, { panel: vscode.WebviewPanel; document: vscode.TextDocument }>;
     private lastDocument?: vscode.TextDocument;
-    constructor(extensionUri: vscode.Uri) {
+    private panelCounter = 0;
+    constructor(extensionUri: vscode.Uri, private readonly diagnostics?: DragDiagnostics) {
         this.extensionUri = extensionUri;
         this.webviews = new Map();
     }
@@ -196,8 +214,51 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
         }
         return false;
     }
+    async addImagesToCanvas(uris: vscode.Uri[]): Promise<void> {
+        const entries = [...this.webviews.values()];
+        let target = entries.find(entry => entry.panel.active);
+        if (!target && entries.length === 1) target = entries[0];
+        if (!target && entries.length > 1) {
+            const selected = await vscode.window.showQuickPick(entries.map(entry => ({
+                label: vscode.workspace.asRelativePath(entry.document.uri), entry
+            })), { placeHolder: 'Choose the canvas for these images' });
+            target = selected?.entry;
+        }
+        if (!target) {
+            if (!entries.length) vscode.window.showWarningMessage('Open a canvas before adding images');
+            return;
+        }
+        const folder = vscode.workspace.getWorkspaceFolder(target.document.uri);
+        if (!folder) {
+            vscode.window.showWarningMessage('The canvas must belong to a workspace folder');
+            return;
+        }
+        const paths: string[] = [];
+        for (const uri of uris) {
+            try {
+                if (!uri || uri.scheme !== folder.uri.scheme || uri.authority !== folder.uri.authority || !IMAGE_FILE_RE.test(uri.path)) {
+                    throw new Error('Select an image in the canvas workspace folder');
+                }
+                const relative = this.normalizeToRelativePath(uri.fsPath, folder.uri.fsPath);
+                const stat = await vscode.workspace.fs.stat(uri);
+                if (!(stat.type & vscode.FileType.File)) throw new Error('The selected item is not a file');
+                if (!paths.includes(relative)) paths.push(relative);
+            } catch (error) {
+                vscode.window.showWarningMessage('Could not add image: ' + String(error));
+            }
+        }
+        if (paths.length) {
+            if (!target.panel.active) target.panel.reveal(target.panel.viewColumn, false);
+            if (!await target.panel.webview.postMessage({type: 'addImagesToCanvas', paths})) {
+                vscode.window.showWarningMessage('Could not reach the selected canvas');
+            }
+        }
+    }
     async resolveCustomTextEditor(document: vscode.TextDocument, webviewPanel: vscode.WebviewPanel, _token: vscode.CancellationToken): Promise<void> {
         this.lastDocument = document;
+        const panelId = ++this.panelCounter;
+        const trace = (event: string, fields: Record<string, unknown> = {}) => this.diagnostics?.record(event, {panelId, ...fields});
+        trace('host.panel_open', {version: document.version});
         this.webviews.set(document.uri.toString(), { panel: webviewPanel, document });
         const localResourceRoots = [
             vscode.Uri.joinPath(this.extensionUri, 'webview'),
@@ -223,10 +284,16 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
         let ownChange: { version: number; content: string } | undefined;
         let lastAcceptedVersion: number | undefined;
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'diagnostic') {
+                if (typeof message.event === 'string' && /^webview\.[a-z0-9_.-]+$/.test(message.event)) trace(message.event, message.fields || {});
+                return;
+            }
             if (message.type === 'save' || message.type === 'undo' || message.type === 'redo') {
+                trace('host.operation_queued', {eventType: message.type, saveId: message.saveId, baseVersion: message.baseVersion, version: document.version});
                 documentOperations = documentOperations.then(async () => {
                     if (message.type === 'save') {
                         if (message.baseVersion !== document.version && document.version !== lastAcceptedVersion) {
+                            trace('host.save_conflict', {saveId: message.saveId, baseVersion: message.baseVersion, version: document.version});
                             await this.recoverCanvas(message.content);
                             webviewPanel.webview.postMessage({ type: 'loadContent', content: document.getText(), version: document.version, afterSaveId: message.saveId });
                             return;
@@ -245,6 +312,7 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
                             }
                         }
                         lastAcceptedVersion = document.version;
+                        trace('host.save_ack', {saveId: message.saveId, version: document.version});
                         webviewPanel.webview.postMessage({ type: 'saveAcknowledged', version: document.version });
                     } else {
                         if (!webviewPanel.active) throw new Error('Canvas is no longer the active editor');
@@ -253,6 +321,7 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
                     }
                 }).catch(async error => {
                     lastAcceptedVersion = undefined;
+                    trace('host.operation_error', {eventType: message.type, saveId: message.saveId, errorName: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message : undefined});
                     console.error('Canvas document operation failed:', error);
                     vscode.window.showErrorMessage('Canvas document operation failed: ' + String(error));
                     if (message.type === 'save') {
@@ -273,6 +342,7 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
                     await this.recoverCanvas(message.content);
                     break;
                 case 'ready':
+                    trace('host.ready', {version: document.version});
                     webviewPanel.webview.postMessage({
                         type: 'loadContent',
                         content: document.getText(),
@@ -281,6 +351,10 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
                     break;
                 case 'loadFile':
                     await this.loadFileContent(webviewPanel, message.filePath, message.nodeId, document);
+                    break;
+                case 'resolveDroppedImage':
+                    trace('host.lookup_request', {eventId: message.eventId, requestId: message.requestId, revision: message.revision, fileSizes: [message.size]});
+                    await this.resolveDroppedImage(webviewPanel, document, message, trace);
                     break;
                 case 'resolveResourceUri':
                     await this.resolveResourceUri(webviewPanel, message.filePath, message.nodeId, document);
@@ -317,7 +391,11 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
         });
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() === document.uri.toString()) {
-                if (ownChange && !e.reason && e.document.version === ownChange.version && e.document.getText() === ownChange.content) return;
+                if (ownChange && !e.reason && e.document.version === ownChange.version && e.document.getText() === ownChange.content) {
+                    trace('host.own_change', {version: e.document.version});
+                    return;
+                }
+                trace('host.document_update', {version: e.document.version, reason: e.reason === undefined ? 'external' : e.reason === vscode.TextDocumentChangeReason.Undo ? 'undo' : 'redo'});
                 lastAcceptedVersion = undefined;
                 webviewPanel.webview.postMessage({
                     type: 'loadContent',
@@ -374,6 +452,46 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
                 nodeId: nodeId,
                 error: `Failed to load file: ${filePath}`
             });
+        }
+    }
+    private async resolveDroppedImage(panel: vscode.WebviewPanel, document: vscode.TextDocument, message: {
+        name: string; size: number; sha256: string; x: number; y: number; revision: number; requestId?: number; eventId?: number;
+    }, trace: (event: string, fields?: Record<string, unknown>) => void = () => {}): Promise<void> {
+        try {
+            const folder = this.workspaceFolderFor(document);
+            if (!folder) throw new Error('No workspace folder found');
+            if (typeof message.name !== 'string' || /[\\/]/.test(message.name) || !IMAGE_FILE_RE.test(message.name) ||
+                !Number.isSafeInteger(message.size) || message.size < 0 || !/^[a-f0-9]{64}$/.test(message.sha256)) {
+                throw new Error('Invalid dropped image details');
+            }
+            // Metacharacters require a broad search followed by an exact basename check.
+            const safeName = /^[A-Za-z0-9 _.-]+$/.test(message.name);
+            const pattern = new vscode.RelativePattern(folder, safeName ? `**/${message.name}` : '**/*');
+            const candidates = await vscode.workspace.findFiles(pattern, null);
+            const matches: { label: string; uri: vscode.Uri }[] = [];
+            for (const uri of candidates) {
+                if (path.basename(uri.fsPath) !== message.name) continue;
+                const relative = this.normalizeToRelativePath(uri.fsPath, folder.uri.fsPath);
+                const stat = await vscode.workspace.fs.stat(uri);
+                if (stat.size !== message.size || !(stat.type & vscode.FileType.File)) continue;
+                const bytes = await vscode.workspace.fs.readFile(uri);
+                if (createHash('sha256').update(bytes).digest('hex') === message.sha256) {
+                    matches.push({label: relative, uri});
+                    trace('host.lookup_candidate', {eventId: message.eventId, requestId: message.requestId, relativePath: relative});
+                }
+            }
+            trace('host.lookup_matches', {eventId: message.eventId, requestId: message.requestId, candidateCount: candidates.length, matchCount: matches.length});
+            if (!matches.length) throw new Error('No matching image was found in the canvas workspace');
+            const selected = matches.length === 1 ? matches[0] : await vscode.window.showQuickPick(matches, {
+                placeHolder: 'Choose the image to reference on the canvas'
+            });
+            trace('host.lookup_result', {eventId: message.eventId, requestId: message.requestId, selected: Boolean(selected), relativePath: selected?.label});
+            if (!selected) return;
+            panel.webview.postMessage({type: 'droppedImageResolved', filePath: selected.label, x: message.x, y: message.y, revision: message.revision, requestId: message.requestId, eventId: message.eventId});
+        } catch (error) {
+            trace('host.lookup_error', {eventId: message.eventId, requestId: message.requestId, errorName: error instanceof Error ? error.name : 'unknown', errorCode: error instanceof Error && 'code' in error ? error.code : undefined, errorMessage: error instanceof Error ? error.message : undefined, reason: error instanceof Error && error.message === 'No matching image was found in the canvas workspace' ? 'no_match' : error instanceof Error && error.message === 'Invalid dropped image details' ? 'invalid_details' : error instanceof Error && error.message === 'No workspace folder found' ? 'no_workspace' : 'other'});
+            console.error('Failed to resolve dropped image:', error);
+            vscode.window.showWarningMessage('Could not add the dropped image: ' + String(error));
         }
     }
     private async resolveResourceUri(webviewPanel: vscode.WebviewPanel, filePath: string, nodeId: string, document: vscode.TextDocument): Promise<void> {
@@ -522,6 +640,66 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
             setState: (state) => vscode.setState(state),
             getState: () => vscode.getState()
         };
+
+        ${this.diagnostics ? `
+        window.canvasDiagnostics = (event, fields = {}) => {
+            try { vscode.postMessage({type: 'diagnostic', event, fields}); } catch (_) { /* diagnostics must not affect editing */ }
+        };
+        window.canvasDiagnostics('webview.bootstrap', {available: true});
+        const dragEvents = new WeakMap();
+        let nextDragEvent = 0;
+        window.canvasDropEventId = event => {
+            if (!dragEvents.has(event)) dragEvents.set(event, ++nextDragEvent);
+            return dragEvents.get(event);
+        };
+        window.addEventListener('error', event => {
+            const file = String(event.filename || event.target?.src || '').split('?')[0].split('/').pop();
+            const source = ['main.js', 'InfiniteCanvasSimple.js'].includes(file) ? file : 'unknown';
+            const message = String(event.message || '');
+            const errorMessage = ['Cannot read properties', 'is not defined', 'is not a function', 'Unexpected token',
+                'Failed to fetch dynamically imported module', 'Failed to load module script'].find(part => message.includes(part));
+            window.canvasDiagnostics('webview.script_error', {target: event.target?.tagName || 'window',
+                errorName: event.error?.name || 'resource_error', errorMessage, source, line: event.lineno, column: event.colno});
+        }, true);
+        window.addEventListener('unhandledrejection', event => window.canvasDiagnostics('webview.promise_error', {
+            errorName: event.reason?.name || 'unknown'
+        }));
+        for (const [scope, surface] of [['window', window], ['document', document]]) {
+            let lastOver = 0;
+            for (const name of ['dragenter', 'dragover', 'drop', 'canvas-diagnostic-probe']) {
+                const eventType = name === 'canvas-diagnostic-probe' ? 'diagnostic_probe' : name;
+                surface.addEventListener(name, event => {
+                    if (eventType === 'dragover' && Date.now() - lastOver < 750) return;
+                    if (eventType === 'dragover') lastOver = Date.now();
+                    window.canvasDiagnostics('webview.capture_entry', {scope, eventType});
+                    try {
+                        const transfer = event.dataTransfer;
+                        const files = transfer ? Array.from(transfer.files || []) : [];
+                        const items = transfer ? Array.from(transfer.items || []) : [];
+                        const types = transfer ? Array.from(transfer.types || []).slice(0, 20) : [];
+                        const typeLengths = eventType === 'drop' ? types.map(type => {
+                            try { return type + ':' + transfer.getData(type).length; } catch (_) { return type + ':error'; }
+                        }) : [];
+                        window.canvasDiagnostics('webview.capture', {
+                            scope, eventType, eventId: window.canvasDropEventId(event), target: event.target?.id === 'canvas' ? 'canvas' : (event.target?.tagName || 'other'),
+                            shift: event.shiftKey, ctrl: event.ctrlKey, alt: event.altKey, meta: event.metaKey,
+                            defaultPrevented: event.defaultPrevented, effectAllowed: transfer?.effectAllowed,
+                            dropEffect: transfer?.dropEffect, types, typeLengths,
+                            itemCount: items.length, itemTypes: items.map(item => item.type), itemKinds: items.map(item => item.kind), fileCount: files.length,
+                            fileTypes: files.map(file => file.type), fileSizes: files.map(file => file.size),
+                            fileNameLengths: files.map(file => file.name.length), filePathFlags: files.map(file => Boolean(file.path)),
+                            x: event.clientX, y: event.clientY
+                        });
+                    } catch (error) {
+                        window.canvasDiagnostics('webview.capture_error', {scope, eventType, errorName: error?.name || 'unknown'});
+                    }
+                }, true);
+            }
+        }
+        window.canvasDiagnostics('webview.capture_listeners_ready', {available: true});
+        try { document.dispatchEvent(new Event('canvas-diagnostic-probe', {bubbles: true})); }
+        catch (error) { window.canvasDiagnostics('webview.probe_error', {errorName: error?.name || 'unknown'}); }
+        ` : ''}
         
         window.addEventListener('message', event => {
             const message = event.data;

@@ -3,6 +3,8 @@
 
 import { InfiniteCanvas } from './src/InfiniteCanvasSimple.js';
 
+window.canvasDiagnostics?.('webview.module_ready', {available: true});
+
 class VSCodeCanvasApp {
     constructor() {
         this.canvas = null;
@@ -33,6 +35,7 @@ class VSCodeCanvasApp {
             // Initialize the canvas
             this.canvas = new InfiniteCanvas('canvas');
             this.isInitialized = true;
+            window.canvasDiagnostics?.('webview.canvas_ready', {initialized: true});
             
             console.log('🎯 Canvas object created:', this.canvas);
             
@@ -81,7 +84,9 @@ class VSCodeCanvasApp {
         const renderOnChange = this.canvas.canvasState.onStateChange;
         this.canvas.canvasState.onStateChange = () => {
             renderOnChange?.();
+            inputHandler?.invalidatePendingDrops?.();
             this.dirty = true;
+            window.canvasDiagnostics?.('webview.state_dirty', {dirty: true, interacting: this.isUserInteracting});
             clearTimeout(this.saveTimer);
             if (!this.isUserInteracting) {
                 this.saveTimer = setTimeout(() => this.flushSave(), 500);
@@ -99,6 +104,7 @@ class VSCodeCanvasApp {
             const redo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey);
             if (key !== 'z' && !redo) return;
             e.preventDefault();
+            inputHandler?.invalidatePendingDrops?.();
             this.finishInteraction();
             this.flushSave();
             window.vsCodeAPI?.postMessage({ type: redo ? 'redo' : 'undo' });
@@ -113,7 +119,10 @@ class VSCodeCanvasApp {
     flushSave() {
         clearTimeout(this.saveTimer);
         this.saveTimer = null;
-        if (!this.dirty || this.documentVersion === undefined) return;
+        if (!this.dirty || this.documentVersion === undefined) {
+            window.canvasDiagnostics?.('webview.save_deferred', {dirty: this.dirty, reason: this.documentVersion === undefined ? 'no_version' : 'clean'});
+            return;
+        }
         this.dirty = false;
         this.saveToVSCode();
     }
@@ -126,6 +135,7 @@ class VSCodeCanvasApp {
             const content = JSON.stringify(canvasData, null, 2);
             
             if (window.vsCodeAPI) {
+                window.canvasDiagnostics?.('webview.save_post', {saveId: this.lastSaveId + 1, baseVersion: this.documentVersion, nodeCount: canvasData.nodes.length});
                 window.vsCodeAPI.postMessage({
                     type: 'save',
                     content: content,
@@ -142,11 +152,12 @@ class VSCodeCanvasApp {
         if (!this.isInitialized) {
             // Store content to load after initialization
             this.pendingContent = { content, version };
+            window.canvasDiagnostics?.('webview.load_pending', {version});
             return;
         }
         
-        if (afterSaveId !== undefined && afterSaveId < this.lastSaveId) return;
-        if (this.documentVersion !== undefined && version < this.documentVersion) return;
+        if (afterSaveId !== undefined && afterSaveId < this.lastSaveId) { window.canvasDiagnostics?.('webview.load_ignored', {reason: 'superseded', afterSaveId, saveId: this.lastSaveId}); return; }
+        if (this.documentVersion !== undefined && version < this.documentVersion) { window.canvasDiagnostics?.('webview.load_ignored', {reason: 'old_version', version}); return; }
         clearTimeout(this.saveTimer);
         this.saveTimer = null;
         const editor = this.canvas.inputHandler?.activeCanvasEditor;
@@ -161,6 +172,7 @@ class VSCodeCanvasApp {
         }
         this.dirty = false;
         this.isUserInteracting = false;
+        this.canvas.inputHandler?.invalidatePendingDrops?.();
         this.canvas.inputHandler?.resetDragState();
         this.documentVersion = version;
 
@@ -174,8 +186,10 @@ class VSCodeCanvasApp {
                 this.canvas.canvasState.onStateChange = originalOnStateChange;
             }
             this.canvas.requestRender?.();
+            window.canvasDiagnostics?.('webview.load_applied', {version, nodeCount: canvasData.nodes?.length || 0});
             console.log('✅ Loaded canvas content from VS Code');
         } catch (error) {
+            window.canvasDiagnostics?.('webview.load_error', {version, errorName: error?.name || 'unknown'});
             console.error('❌ Error loading canvas content:', error);
             // Start with empty canvas on error
         }
@@ -200,8 +214,47 @@ window.addEventListener('message', event => {
     
     switch (message.type) {
         case 'saveAcknowledged':
+            window.canvasDiagnostics?.('webview.save_ack', {version: message.version});
             window.canvasApp.documentVersion = Math.max(window.canvasApp.documentVersion ?? 0, message.version);
             if (!window.canvasApp.isUserInteracting) window.canvasApp.flushSave();
+            break;
+        case 'addImagesToCanvas': {
+            const handler = window.canvasApp.canvas.inputHandler;
+            const canvas = window.canvasApp.canvas.canvas;
+            const pending = handler.pendingCanvasAdds ||= new Set();
+            let observer;
+            let cancelled = false;
+            const cancel = () => {
+                cancelled = true;
+                observer?.disconnect();
+                pending.delete(cancel);
+            };
+            pending.add(cancel);
+            const addWhenVisible = () => {
+                if (cancelled || !canvas.clientWidth || !canvas.clientHeight) return false;
+                pending.delete(cancel);
+                observer?.disconnect();
+                const x = (canvas.clientWidth / 2 - canvasState.offsetX) / canvasState.scale;
+                const y = (canvas.clientHeight / 2 - canvasState.offsetY) / canvasState.scale;
+                handler.acceptingCanvasAdd = true;
+                try {
+                    message.paths.forEach((filePath, index) => handler.createFileNodeFromPath(filePath, x + index * 40, y + index * 40));
+                } finally {
+                    handler.acceptingCanvasAdd = false;
+                }
+                return true;
+            };
+            requestAnimationFrame(() => {
+                if (cancelled || addWhenVisible()) return;
+                observer = new ResizeObserver(() => {
+                    if (!cancelled) addWhenVisible();
+                });
+                observer.observe(canvas);
+            });
+            break;
+        }
+        case 'droppedImageResolved':
+            window.canvasApp.canvas.inputHandler?.acceptResolvedDrop(message);
             break;
         case 'fileContentLoaded':
             canvasState.updateFileContent(

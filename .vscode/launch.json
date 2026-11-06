@@ -5,8 +5,10 @@
             "name": "Run Extension",
             "type": "extensionHost",
             "request": "launch",
+            "preLaunchTask": "compile-extension",
             "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}"
+                "--extensionDevelopmentPath=${workspaceFolder}",
+                "${workspaceFolder}"
             ]
         }
     ]
