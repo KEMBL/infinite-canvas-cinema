@@ -1,5 +1,11 @@
 # Cinema fork changes
 
+## 0.1.10
+
+- Add canvas undo and redo using VS Code document history.
+- Add the Explorer context action to insert selected images into a canvas, with filename-based tags and workspace path checks.
+- Keep Shift-drag support where VS Code delivers the drop; some current VS Code versions can block Explorer-to-webview drag events.
+
 ## 0.1.9
 
 - Replace the upstream icon with the Great Bear / Big Dipper, styled as seven star nodes connected by flowchart arrows. Include the editable SVG and a 256px PNG for VS Code.
