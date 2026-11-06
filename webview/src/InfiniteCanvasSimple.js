@@ -780,25 +780,11 @@ class CanvasState {
         this.notifyStateChange();
     }
     
-    // Force immediate save to VS Code (for text node editing)
+    // Text edits use the same versioned save coordinator as canvas interactions.
     async saveCanvasState() {
-        try {
-            const canvasData = this.exportCanvasData();
-            const content = JSON.stringify(canvasData, null, 2);
-            
-            if (window.vsCodeAPI) {
-                window.vsCodeAPI.postMessage({
-                    type: 'save',
-                    content: content
-                });
-                console.log('💾 Canvas state saved immediately to VS Code');
-            } else {
-                console.warn('⚠️ VS Code API not available, falling back to state change');
-                this.notifyStateChange();
-            }
-        } catch (error) {
-            console.error('❌ Failed to save canvas state:', error);
-            // Fallback to normal state change
+        if (this.requestSaveNow) {
+            this.requestSaveNow();
+        } else {
             this.notifyStateChange();
         }
     }
@@ -1667,6 +1653,7 @@ class InputHandler {
         input.type = 'text';
         input.className = 'file-node-tag-editor';
         input.value = node.tag || suggestTagFromPath(node.file) || '';
+        const initialValue = input.value;
         input.placeholder = 'tag';
         input.style.left = `${screenX}px`;
         input.style.top = `${screenY}px`;
@@ -1677,8 +1664,17 @@ class InputHandler {
         input.focus();
         input.select();
 
+        let discarded = false;
+        this.activeCanvasEditor = {
+            capture: data => {
+                const target = data.nodes.find(item => item.id === node.id);
+                if (target && input.value !== initialValue) target.tag = input.value;
+                return input.value !== initialValue;
+            },
+            close: () => { discarded = true; input.remove(); }
+        };
         const finish = async (commit) => {
-            if (!document.body.contains(input)) {
+            if (discarded || !document.body.contains(input)) {
                 return;
             }
             if (commit) {
@@ -1691,8 +1687,10 @@ class InputHandler {
                     input.select();
                     return;
                 }
+                this.activeCanvasEditor = null;
                 await this.canvasState.saveCanvasState();
             }
+            this.activeCanvasEditor = null;
             input.remove();
         };
 
@@ -1872,6 +1870,7 @@ class InputHandler {
         // Create textarea for multiline editing
         const textarea = document.createElement('textarea');
         textarea.value = node.text || '';
+        const initialValue = textarea.value;
         textarea.dataset.nodeId = node.id; // Add node ID for tracking
         textarea.dataset.nodeEditor = 'true'; // Mark as node editor
         textarea.style.cssText = `
@@ -1902,8 +1901,18 @@ class InputHandler {
         node.isEditing = true;
         this.canvasState.notifyStateChange();
         
+        let discarded = false;
+        this.activeCanvasEditor = {
+            capture: data => {
+                const target = data.nodes.find(item => item.id === node.id);
+                if (target && textarea.value !== initialValue) target.text = textarea.value || 'New Node';
+                return textarea.value !== initialValue;
+            },
+            close: () => { discarded = true; textarea.remove(); }
+        };
         const finishEditing = async () => {
-            if (document.body.contains(textarea)) {
+            if (!discarded && document.body.contains(textarea)) {
+                this.activeCanvasEditor = null;
                 node.text = textarea.value || 'New Node';
                 node.isEditing = false;
                 document.body.removeChild(textarea);
@@ -1916,6 +1925,7 @@ class InputHandler {
         
         const cancelEditing = () => {
             if (document.body.contains(textarea)) {
+                this.activeCanvasEditor = null;
                 node.isEditing = false;
                 document.body.removeChild(textarea);
                 this.canvasState.notifyStateChange();

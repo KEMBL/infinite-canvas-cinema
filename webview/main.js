@@ -41,7 +41,7 @@ class VSCodeCanvasApp {
             
             // Load any pending content
             if (this.pendingContent) {
-                this.loadCanvasContent(this.pendingContent);
+                this.loadCanvasContent(this.pendingContent.content, this.pendingContent.version);
                 this.pendingContent = null;
             }
             
@@ -56,56 +56,66 @@ class VSCodeCanvasApp {
     }
 
     setupVSCodeIntegration() {
-        // Auto-save functionality with interaction awareness
-        if (this.canvas && this.canvas.canvasState) {
-            this.isUserInteracting = false;
-            this.saveQueue = null;
-            
-            // Track user interactions to prevent save loops
-            const inputHandler = this.canvas.inputHandler;
-            if (inputHandler) {
-                // Override mouse handlers to track interaction state
-                const originalMouseDown = inputHandler.handleMouseDown.bind(inputHandler);
-                const originalMouseUp = inputHandler.handleMouseUp.bind(inputHandler);
-                
-                inputHandler.handleMouseDown = (e) => {
-                    this.isUserInteracting = true;
-                    return originalMouseDown(e);
-                };
-                
-                inputHandler.handleMouseUp = (e) => {
-                    const result = originalMouseUp(e);
-                    // Delay setting interaction to false to allow for completion
-                    setTimeout(() => {
-                        this.isUserInteracting = false;
-                        // Save any queued changes
-                        if (this.saveQueue) {
-                            this.saveToVSCode();
-                            this.saveQueue = null;
-                        }
-                    }, 100);
-                    return result;
-                };
-            }
-            
-            // Save canvas state when it changes (but only if not interacting)
-            this.canvas.canvasState.onStateChange = () => {
-                if (this.isUserInteracting) {
-                    // Queue save for later
-                    this.saveQueue = true;
-                } else {
-                    // Save immediately with debounce
-                    this.debouncedSave();
-                }
+        if (!this.canvas || !this.canvas.canvasState) return;
+        this.isUserInteracting = false;
+        this.dirty = false;
+        this.documentVersion = undefined;
+        this.saveTimer = null;
+        this.lastSaveId = 0;
+        const inputHandler = this.canvas.inputHandler;
+        if (inputHandler) {
+            const down = inputHandler.handleMouseDown.bind(inputHandler);
+            const up = inputHandler.handleMouseUp.bind(inputHandler);
+            inputHandler.handleMouseDown = e => {
+                this.isUserInteracting = true;
+                return down(e);
             };
-            
-            // Debounced save to prevent excessive saves
-            this.debouncedSave = this.debounce(() => {
-                if (!this.isUserInteracting) {
-                    this.saveToVSCode();
-                }
-            }, 500);
+            inputHandler.handleMouseUp = e => {
+                const result = up(e);
+                this.finishInteraction();
+                return result;
+            };
+            this.canvas.canvas.addEventListener('mouseleave', () => this.finishInteraction());
+            window.addEventListener('blur', () => this.finishInteraction());
         }
+        const renderOnChange = this.canvas.canvasState.onStateChange;
+        this.canvas.canvasState.onStateChange = () => {
+            renderOnChange?.();
+            this.dirty = true;
+            clearTimeout(this.saveTimer);
+            if (!this.isUserInteracting) {
+                this.saveTimer = setTimeout(() => this.flushSave(), 500);
+            }
+        };
+        this.canvas.canvasState.requestSaveNow = () => {
+            this.canvas.canvasState.notifyStateChange();
+            if (!this.isUserInteracting) this.flushSave();
+        };
+        document.addEventListener('keydown', e => {
+            const target = e.target;
+            if (e.defaultPrevented || e.altKey || !(e.ctrlKey || e.metaKey) ||
+                (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable))) return;
+            const key = e.key.toLowerCase();
+            const redo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey);
+            if (key !== 'z' && !redo) return;
+            e.preventDefault();
+            this.finishInteraction();
+            this.flushSave();
+            window.vsCodeAPI?.postMessage({ type: redo ? 'redo' : 'undo' });
+        });
+    }
+
+    finishInteraction() {
+        this.isUserInteracting = false;
+        this.flushSave();
+    }
+
+    flushSave() {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+        if (!this.dirty || this.documentVersion === undefined) return;
+        this.dirty = false;
+        this.saveToVSCode();
     }
 
     saveToVSCode() {
@@ -118,7 +128,9 @@ class VSCodeCanvasApp {
             if (window.vsCodeAPI) {
                 window.vsCodeAPI.postMessage({
                     type: 'save',
-                    content: content
+                    content: content,
+                    baseVersion: this.documentVersion,
+                    saveId: ++this.lastSaveId
                 });
             }
         } catch (error) {
@@ -126,60 +138,55 @@ class VSCodeCanvasApp {
         }
     }
 
-    loadCanvasContent(content) {
+    loadCanvasContent(content, version, afterSaveId) {
         if (!this.isInitialized) {
             // Store content to load after initialization
-            this.pendingContent = content;
+            this.pendingContent = { content, version };
             return;
         }
         
-        // Skip loading if user is currently interacting
-        if (this.isUserInteracting) {
-            console.log('⏸️ Skipping content load during user interaction');
-            return;
+        if (afterSaveId !== undefined && afterSaveId < this.lastSaveId) return;
+        if (this.documentVersion !== undefined && version < this.documentVersion) return;
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+        const editor = this.canvas.inputHandler?.activeCanvasEditor;
+        const recovery = (this.dirty || editor) ? this.canvas.canvasState.exportCanvasData() : null;
+        const editorChanged = editor ? editor.capture(recovery) : false;
+        if (editor) {
+            this.canvas.inputHandler.activeCanvasEditor = null;
+            editor.close();
         }
-        
+        if (this.dirty || editorChanged) {
+            window.vsCodeAPI?.postMessage({ type: 'recoverCanvas', content: JSON.stringify(recovery, null, 2) });
+        }
+        this.dirty = false;
+        this.isUserInteracting = false;
+        this.canvas.inputHandler?.resetDragState();
+        this.documentVersion = version;
+
         try {
-            if (content && content.trim()) {
-                const canvasData = JSON.parse(content);
-                if (this.canvas && this.canvas.canvasState) {
-                    // Temporarily disable state change notifications during load
-                    const originalOnStateChange = this.canvas.canvasState.onStateChange;
-                    this.canvas.canvasState.onStateChange = null;
-                    
-                    this.canvas.canvasState.loadCanvasData(canvasData);
-                    console.log('✅ Loaded canvas content from VS Code');
-                    
-                    // Re-enable state change notifications
-                    this.canvas.canvasState.onStateChange = originalOnStateChange;
-                }
-            } else {
-                console.log('📝 No content to load, starting with empty canvas');
+            const canvasData = content && content.trim() ? JSON.parse(content) : { nodes: [], edges: [] };
+            const originalOnStateChange = this.canvas.canvasState.onStateChange;
+            this.canvas.canvasState.onStateChange = null;
+            try {
+                this.canvas.canvasState.loadCanvasData(canvasData);
+            } finally {
+                this.canvas.canvasState.onStateChange = originalOnStateChange;
             }
+            this.canvas.requestRender?.();
+            console.log('✅ Loaded canvas content from VS Code');
         } catch (error) {
             console.error('❌ Error loading canvas content:', error);
             // Start with empty canvas on error
         }
     }
 
-    // Utility function for debouncing
-    debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
 }
 
 // Make loadCanvasContent globally available for the extension
-window.loadCanvasContent = (content) => {
+window.loadCanvasContent = (content, version, afterSaveId) => {
     if (window.canvasApp) {
-        window.canvasApp.loadCanvasContent(content);
+        window.canvasApp.loadCanvasContent(content, version, afterSaveId);
     }
 };
 
@@ -192,6 +199,10 @@ window.addEventListener('message', event => {
     if (!canvasState) return;
     
     switch (message.type) {
+        case 'saveAcknowledged':
+            window.canvasApp.documentVersion = Math.max(window.canvasApp.documentVersion ?? 0, message.version);
+            if (!window.canvasApp.isUserInteracting) window.canvasApp.flushSave();
+            break;
         case 'fileContentLoaded':
             canvasState.updateFileContent(
                 message.nodeId, 

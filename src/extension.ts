@@ -168,12 +168,10 @@ async function exportTagsForDocument(document: vscode.TextDocument): Promise<voi
 class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
     private static readonly viewType = 'infinite-canvas-cinema.canvasEditor';
     private readonly extensionUri: vscode.Uri;
-    private isSaving: boolean;
     private webviews: Map<string, { panel: vscode.WebviewPanel; document: vscode.TextDocument }>;
     private lastDocument?: vscode.TextDocument;
     constructor(extensionUri: vscode.Uri) {
         this.extensionUri = extensionUri;
-        this.isSaving = false;
         this.webviews = new Map();
     }
     getActiveDocument(): vscode.TextDocument | undefined {
@@ -220,19 +218,65 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
             localResourceRoots
         };
         webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document);
+        // Serialize document edits and history commands from this panel.
+        let documentOperations = Promise.resolve();
+        let ownChange: { version: number; content: string } | undefined;
+        let lastAcceptedVersion: number | undefined;
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'save' || message.type === 'undo' || message.type === 'redo') {
+                documentOperations = documentOperations.then(async () => {
+                    if (message.type === 'save') {
+                        if (message.baseVersion !== document.version && document.version !== lastAcceptedVersion) {
+                            await this.recoverCanvas(message.content);
+                            webviewPanel.webview.postMessage({ type: 'loadContent', content: document.getText(), version: document.version, afterSaveId: message.saveId });
+                            return;
+                        }
+                        if (document.getText() !== message.content) {
+                            const expectedVersion = document.version + 1;
+                            ownChange = { version: expectedVersion, content: message.content };
+                            try {
+                                await this.saveDocument(document, message.content);
+                            } finally {
+                                ownChange = undefined;
+                            }
+                            if (document.version !== expectedVersion || document.getText() !== message.content) {
+                                lastAcceptedVersion = undefined;
+                                return;
+                            }
+                        }
+                        lastAcceptedVersion = document.version;
+                        webviewPanel.webview.postMessage({ type: 'saveAcknowledged', version: document.version });
+                    } else {
+                        if (!webviewPanel.active) throw new Error('Canvas is no longer the active editor');
+                        await vscode.commands.executeCommand(message.type);
+                        lastAcceptedVersion = undefined;
+                    }
+                }).catch(async error => {
+                    lastAcceptedVersion = undefined;
+                    console.error('Canvas document operation failed:', error);
+                    vscode.window.showErrorMessage('Canvas document operation failed: ' + String(error));
+                    if (message.type === 'save') {
+                        try {
+                            await this.recoverCanvas(message.content);
+                        } catch (recoveryError) {
+                            console.error('Canvas recovery failed:', recoveryError);
+                            vscode.window.showErrorMessage('Could not open the canvas recovery snapshot: ' + String(recoveryError));
+                            return;
+                        }
+                    }
+                    webviewPanel.webview.postMessage({ type: 'loadContent', content: document.getText(), version: document.version, afterSaveId: message.type === 'save' ? message.saveId : undefined });
+                });
+                return;
+            }
             switch (message.type) {
-                case 'save':
-                    this.isSaving = true;
-                    await this.saveDocument(document, message.content);
-                    setTimeout(() => {
-                        this.isSaving = false;
-                    }, 200);
+                case 'recoverCanvas':
+                    await this.recoverCanvas(message.content);
                     break;
                 case 'ready':
                     webviewPanel.webview.postMessage({
                         type: 'loadContent',
-                        content: document.getText()
+                        content: document.getText(),
+                        version: document.version
                     });
                     break;
                 case 'loadFile':
@@ -273,15 +317,13 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
         });
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() === document.uri.toString()) {
-                if (!this.isSaving) {
-                    webviewPanel.webview.postMessage({
-                        type: 'loadContent',
-                        content: document.getText()
-                    });
-                }
-                else {
-                    console.log('Skipping reload during save operation');
-                }
+                if (ownChange && !e.reason && e.document.version === ownChange.version && e.document.getText() === ownChange.content) return;
+                lastAcceptedVersion = undefined;
+                webviewPanel.webview.postMessage({
+                    type: 'loadContent',
+                    content: document.getText(),
+                    version: document.version
+                });
             }
         });
         webviewPanel.onDidDispose(() => {
@@ -289,11 +331,16 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
             this.webviews.delete(document.uri.toString());
         });
     }
+    private async recoverCanvas(content: string): Promise<void> {
+        const recovery = await vscode.workspace.openTextDocument({ content, language: 'json' });
+        await vscode.window.showTextDocument(recovery, { preview: false });
+        vscode.window.showWarningMessage('A canvas change conflicted with a document update. Its unsaved state is open in a separate editor for recovery.');
+    }
     private async saveDocument(document: vscode.TextDocument, content: string): Promise<void> {
         if (document.getText() === content) return;
         const edit = new vscode.WorkspaceEdit();
         edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), content);
-        await vscode.workspace.applyEdit(edit);
+        if (!await vscode.workspace.applyEdit(edit)) throw new Error('VS Code rejected the canvas edit');
     }
     private workspaceFolderFor(document: vscode.TextDocument): vscode.WorkspaceFolder | undefined {
         return vscode.workspace.getWorkspaceFolder(document.uri) || vscode.workspace.workspaceFolders?.[0];
@@ -481,13 +528,12 @@ class CanvasEditorProvider implements vscode.CustomTextEditorProvider {
             switch (message.type) {
                 case 'loadContent':
                     if (window.loadCanvasContent) {
-                        window.loadCanvasContent(message.content);
+                        window.loadCanvasContent(message.content, message.version, message.afterSaveId);
                     }
                     break;
             }
         });
         
-        vscode.postMessage({ type: 'ready' });
     </script>
     
     <script nonce="${nonce}" type="module" src="${mainScriptUri}"></script>

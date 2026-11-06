@@ -148,7 +148,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
-    "test": "npm run compile && node test/regression.cjs"
+    "test": "npm run compile && node test/regression.cjs && node test/history.cjs && node test/history-host.cjs"
   },
   "devDependencies": {
     "@types/node": "16.x",
