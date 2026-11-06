@@ -1,0 +1,33 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "node_modules": true,
+      "coverage": true,
+    },
+    "files.eol": "\n",
+		"explorer.copyRelativePathSeparator": "/",
+		"microsoft-authentication.implementation": "msal-no-broker",
+    "terminal.integrated.scrollback": 200000,
+    "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+    "editor.copyWithSyntaxHighlighting": false,
+    "debug.console.collapseIdenticalLines": false,
+    "github.copilot.editor.enableCodeActions": true,
+    "workbench.browser.enableChatTools": true,
+    "github.copilot.chat.agentDebugLog.fileLogging.enabled": true,
+    "github.copilot.chat.localeOverride": "en",
+    "markdown.validate.enabled": true,
+    "terminal.integrated.shellIntegration.enabled": true,
+    "python.terminal.useEnvFile": true,
+    "workbench.diffEditorAssociations": {
+      "*.md": "vscode.markdown.preview.editor"
+    },
+    "workbench.editorAssociations": {
+      "*.canvas": "infinite-canvas-cinema.canvasEditor"
+    }
+  }
+}

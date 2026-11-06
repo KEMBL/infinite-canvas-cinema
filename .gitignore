@@ -5,3 +5,21 @@ node_modules
 .DS_Store
 
 sharing
+temp/
+.env
+
+# Agentic folders
+
+.agents/
+.claude/
+.codex/
+.codex-remote-attachments/
+!.github/memory
+.github
+.serena/
+.serena-cache/
+AGENTS.md
+CLAUDE.md
+.mcp.json
+.vscode/mcp.json
+scripts/serena-bootstrap.sh
